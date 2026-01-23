@@ -173,5 +173,25 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
+          set -euo pipefail
+
+          # Collect digest files and validate count (expect exactly 2)
+          shopt -s nullglob
+          digests=( * )
+          if [ "${#digests[@]}" -ne 2 ]; then
+            echo "Error: Expected exactly 2 digest files in /tmp/digests, found ${#digests[@]}."
+            echo "Contents of /tmp/digests:"
+            ls -al .
+            exit 1
+          fi
+
+          # Validate that each filename looks like a sha256 digest (64 hex chars, no 'sha256:' prefix)
+          for digest_file in "${digests[@]}"; do
+            if ! [[ "$digest_file" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "Error: Invalid digest filename '$digest_file'. Expected 64 lowercase hex characters with no 'sha256:' prefix."
+              exit 1
+            fi
+          done
+
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' "${digests[@]}")
