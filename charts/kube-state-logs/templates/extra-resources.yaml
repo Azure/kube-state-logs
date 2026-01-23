@@ -1,0 +1,15 @@
+{{- if .Values.extraResources }}
+{{- $root := . }}
+{{- range $index, $resource := .Values.extraResources }}
+{{- $manifest := "" }}
+{{- if $resource.template }}
+{{- $manifest = tpl $resource.template $root }}
+{{- else }}
+{{- $manifest = tpl (toYaml $resource) $root }}
+{{- end }}
+{{- if $manifest }}
+---
+{{- $manifest | trim | nindent 0 }}
+{{- end }}
+{{- end }}
+{{- end }}
