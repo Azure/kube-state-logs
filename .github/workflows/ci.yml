@@ -123,7 +123,16 @@ jobs:
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
+          if [[ -z "$digest" ]]; then
+            echo "Error: build output digest is empty" >&2
+            exit 1
+          fi
+          if [[ ! "$digest" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
+            echo "Error: unexpected digest format: '$digest' (expected sha256:<64-hex-chars>)" >&2
+            exit 1
+          fi
+          filename="${digest#sha256:}"
+          touch "/tmp/digests/$filename"
 
       - name: Upload digest
         uses: actions/upload-artifact@v4
