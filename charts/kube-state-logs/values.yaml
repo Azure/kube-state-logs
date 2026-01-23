@@ -1,0 +1,66 @@
+# Default values for kube-state-logs
+
+image:
+  # The registry to pull the image from
+  registry: ghcr.io
+  # The image organization
+  org: azure
+  # The name of the image
+  name: kube-state-logs
+  # The tag of the image
+  tag: latest
+  pullSecrets:
+    name:
+
+# Application configuration
+config:
+  logInterval: "1m"
+  resources:
+    - pod
+    - container
+    - deployment
+    - job
+    - cronjob
+    - statefulset
+    - node
+    - namespace
+    - crd
+    - horizontalpodautoscaler
+    - replicaset
+  namespaces: ""
+  logLevel: "info"
+
+  # Enable ADX-Mon annotations on the pods.
+  enableADXMonAnnotations: false
+  adxMonLogDestination: ""
+
+  # Optional: list of environment variables to capture from each container (example: ["GOMAXPROCS"]).
+  containerEnvVars:
+    - "GOMAXPROCS"
+
+# Resource limits
+resources:
+  limits:
+    cpu: 500m
+    memory: 1500Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Node selection and scheduling
+nodeSelector: {}
+
+tolerations: []
+
+# Used to inject additional resources into the helm release if needed.
+# Example:
+# extraResources:
+#   - name: my-extra-configmap
+#     template: |
+#       apiVersion: v1
+#       kind: ConfigMap
+#       metadata:
+#         name: my-extra-configmap
+#       data:
+#         my-key: my-value
+extraResources: []

@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-logs
+  labels:
+    {{- include "kube-state-logs.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "kube-state-logs.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "kube-state-logs.selectorLabels" . | nindent 8 }}
+      {{- if .Values.config.enableADXMonAnnotations }}
+      annotations:
+        kubernetes.azure.com/log-keys: "{{ include "kube-state-logs.logKeysAnnotation" . }}"
+        adx-mon/scrape: "true"
+        adx-mon/log-parsers: "json"
+        adx-mon/log-destination: "{{ .Values.config.adxMonLogDestination }}:KubeStateLogs"
+      {{- end }}
+    spec:
+      imagePullSecrets:
+      - name: "{{ .Values.image.pullSecrets.name }}-msi-acrpull-secret"
+      serviceAccountName: kube-state-logs
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: kube-state-logs
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "{{ .Values.image.registry }}/{{ .Values.image.org }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+          command: ["/kube-state-logs"]
+          args:
+            - --log-interval={{ .Values.config.logInterval }}
+            - --resources={{ .Values.config.resources | join "," }}
+            {{- if .Values.config.resourceConfigs }}
+            - --resource-configs={{ .Values.config.resourceConfigs | join "," }}
+            {{- end }}
+            {{- if .Values.config.crdConfigs }}
+            {{- $crdArgs := list }}
+            {{- range .Values.config.crdConfigs }}
+            {{- $customFieldsStr := "" }}
+            {{- if .customFields }}
+            {{- $customFieldsStr = (.customFields | join "|") }}
+            {{- end }}
+            {{- $crdArgs = append $crdArgs (printf "%s:%s:%s" .apiVersion .resource $customFieldsStr) }}
+            {{- end }}
+            - --crd-configs={{ $crdArgs | join "," }}
+            {{- end }}
+            {{- if .Values.config.namespaces }}
+            - --namespaces={{ .Values.config.namespaces }}
+            {{- end }}
+            - --log-level={{ .Values.config.logLevel }}
+            {{- if .Values.config.containerEnvVars }}
+            - --container-envvars={{ .Values.config.containerEnvVars | join "," }}
+            {{- end }}
+          resources:
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+          {{- if .Values.env }}
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
