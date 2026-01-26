@@ -12,6 +12,8 @@ This project is heavily inspired by [kube-state-metrics](https://github.com/kube
 
 ## Installation
 
+Requires Helm 3.x (tested with v3.20.0). Helm 4 compatibility has not yet been validated.
+
 ```bash
 helm install kube-state-logs ./charts/kube-state-logs \
   --namespace monitoring \
@@ -35,6 +37,18 @@ config:
 ```
 
 See [charts/kube-state-logs/values.yaml](charts/kube-state-logs/values.yaml) for all options.
+
+## Supported Resources
+
+kube-state-logs can monitor 40+ Kubernetes resource types including pods, deployments, nodes, services, configmaps, RBAC resources, and more. Custom Resource Definitions (CRDs) are also supported.
+
+See [docs/resources.md](docs/resources.md) for the complete list and configuration options.
+
+## ADX-Mon Integration
+
+If you're using [ADX-Mon](https://github.com/Azure/adx-mon) for log collection to Azure Data Explorer, see [docs/adx-mon-integration.md](docs/adx-mon-integration.md) for setup instructions.
+
+We welcome contributions to add support for other log collection solutions (e.g., Fluentd, Vector, Loki, OpenTelemetry). If you'd like to add integration support for another system, please open an issue or pull request.
 
 ## How It Works
 
@@ -88,3 +102,7 @@ See [SECURITY.md](SECURITY.md) for security policy and reporting vulnerabilities
 ## Code of Conduct
 
 See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for our code of conduct.
+
+## Releasing
+
+See [docs/releasing.md](docs/releasing.md) for versioning strategy and release process.

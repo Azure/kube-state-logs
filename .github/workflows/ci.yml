@@ -1,14 +1,18 @@
 name: CI
+# Versioning strategy and release process: docs/releasing.md
 
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
 env:
   REGISTRY: ghcr.io
+  # OCI registries require lowercase paths
   IMAGE_NAME: ${{ github.repository }}
+  CHART_REPO: ghcr.io/${{ github.repository }}/charts
 
 jobs:
   fmt:
@@ -21,7 +25,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.25'
           cache: true
 
       - name: Check go fmt
@@ -43,7 +47,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.25'
           cache: true
 
       - name: Install dependencies
@@ -62,7 +66,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
-          version: v3.12.0
+          version: v3.20.0
 
       - name: Lint Helm chart
         run: helm lint charts/kube-state-logs
@@ -71,7 +75,7 @@ jobs:
     name: Build Docker Image (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     needs: [fmt, test, helm-lint]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
       packages: write
@@ -87,6 +91,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Prepare image name
+        id: image
+        run: echo "name=$(echo '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -101,11 +109,12 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
             type=sha
 
       - name: Build and push by digest
@@ -117,7 +126,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |
@@ -146,7 +155,7 @@ jobs:
     name: Merge Docker Manifests
     runs-on: ubuntu-latest
     needs: [docker]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
       packages: write
@@ -157,6 +166,10 @@ jobs:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
+
+      - name: Prepare image name
+        id: image
+        run: echo "name=$(echo '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -172,11 +185,12 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
             type=sha
 
       - name: Create manifest list and push
@@ -203,4 +217,108 @@ jobs:
           done
 
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' "${digests[@]}")
+            $(printf '${{ steps.image.outputs.name }}@sha256:%s ' "${digests[@]}")
+
+  helm-publish:
+    name: Package and Publish Helm Chart
+    runs-on: ubuntu-latest
+    needs: [docker-merge]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.20.0
+
+      - name: Log in to Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Get version
+        id: version
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Use tag version (strip 'v' prefix)
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"
+            # Validate semver format (x.y.z)
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+              echo "Error: Tag version '$VERSION' is not valid semver (expected x.y.z or x.y.z-prerelease)" >&2
+              exit 1
+            fi
+          else
+            # Use branch name and short SHA for dev version
+            # Sanitize branch name: replace invalid semver chars with dashes
+            BRANCH="${{ github.ref_name }}"
+            BRANCH=$(echo "$BRANCH" | tr '/' '-' | tr -cd '[:alnum:]-.')
+            VERSION="0.0.0-${BRANCH}.$(echo ${{ github.sha }} | cut -c1-7)"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Package Helm chart
+        run: |
+          set -euo pipefail
+          # Update Chart.yaml with the version
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" charts/kube-state-logs/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.version }}\"/" charts/kube-state-logs/Chart.yaml
+          
+          # Set the image tag to match the chart version
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # For releases, use v-prefixed tag (v1.2.3)
+            sed -i "s/^  tag:.*/  tag: v${{ steps.version.outputs.version }}/" charts/kube-state-logs/values.yaml
+          else
+            # For main branch, use latest
+            sed -i "s/^  tag:.*/  tag: latest/" charts/kube-state-logs/values.yaml
+          fi
+          
+          helm package charts/kube-state-logs
+          
+          # Verify the package was created
+          if [[ ! -f "kube-state-logs-${{ steps.version.outputs.version }}.tgz" ]]; then
+            echo "Error: Helm package was not created" >&2
+            exit 1
+          fi
+
+      - name: Push Helm chart to GHCR
+        run: |
+          set -euo pipefail
+          CHART_REPO=$(echo "${{ env.CHART_REPO }}" | tr '[:upper:]' '[:lower:]')
+          helm push kube-state-logs-${{ steps.version.outputs.version }}.tgz oci://${CHART_REPO}
+
+      - name: Push latest Helm chart
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          CHART_REPO=$(echo "${{ env.CHART_REPO }}" | tr '[:upper:]' '[:lower:]')
+          # Re-package with "latest" as version (image tag already set to latest)
+          sed -i "s/^version:.*/version: 0.0.0-latest/" charts/kube-state-logs/Chart.yaml
+          helm package charts/kube-state-logs
+          helm push kube-state-logs-0.0.0-latest.tgz oci://${CHART_REPO}
+
+      - name: Push major/minor Helm chart tags
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')
+        run: |
+          set -euo pipefail
+          CHART_REPO=$(echo "${{ env.CHART_REPO }}" | tr '[:upper:]' '[:lower:]')
+          # Extract version components from tag (v1.2.3 -> 1.0.0-latest, 1.2.0-latest)
+          VERSION="${{ steps.version.outputs.version }}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f1-2)
+          
+          # Push 1.2.0-latest tag (image tag set to v1.2)
+          sed -i "s/^version:.*/version: ${MINOR}.0-latest/" charts/kube-state-logs/Chart.yaml
+          sed -i "s/^  tag:.*/  tag: v$MINOR/" charts/kube-state-logs/values.yaml
+          helm package charts/kube-state-logs
+          helm push kube-state-logs-${MINOR}.0-latest.tgz oci://${CHART_REPO}
+          
+          # Push 1.0.0-latest tag (image tag set to v1)
+          sed -i "s/^version:.*/version: ${MAJOR}.0.0-latest/" charts/kube-state-logs/Chart.yaml
+          sed -i "s/^  tag:.*/  tag: v$MAJOR/" charts/kube-state-logs/values.yaml
+          helm package charts/kube-state-logs
+          helm push kube-state-logs-${MAJOR}.0.0-latest.tgz oci://${CHART_REPO}
