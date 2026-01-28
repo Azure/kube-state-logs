@@ -1,15 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kube-state-logs
+  {{- if eq .Values.deploymentMode "advanced" }}
+  name: {{ include "kube-state-logs.fullname" . }}-cluster
+  {{- else }}
+  name: {{ include "kube-state-logs.fullname" . }}
+  {{- end }}
   labels:
     {{- include "kube-state-logs.labels" . | nindent 4 }}
+    {{- if eq .Values.deploymentMode "advanced" }}
+    app.kubernetes.io/component: cluster
+    {{- end }}
 spec:
   replicas: 1
   revisionHistoryLimit: 3
   selector:
     matchLabels:
       {{- include "kube-state-logs.selectorLabels" . | nindent 6 }}
+      {{- if eq .Values.deploymentMode "advanced" }}
+      app.kubernetes.io/component: cluster
+      {{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -19,9 +29,16 @@ spec:
     metadata:
       labels:
         {{- include "kube-state-logs.selectorLabels" . | nindent 8 }}
+        {{- if eq .Values.deploymentMode "advanced" }}
+        app.kubernetes.io/component: cluster
+        {{- end }}
       {{- if .Values.config.enableADXMonAnnotations }}
       annotations:
+        {{- if eq .Values.deploymentMode "advanced" }}
+        kubernetes.azure.com/log-keys: "{{ include "kube-state-logs.clusterLogKeysAnnotation" . }}"
+        {{- else }}
         kubernetes.azure.com/log-keys: "{{ include "kube-state-logs.logKeysAnnotation" . }}"
+        {{- end }}
         adx-mon/scrape: "true"
         adx-mon/log-parsers: "json"
         adx-mon/log-destination: "{{ .Values.config.adxMonLogDestination }}:KubeStateLogs"
@@ -29,7 +46,11 @@ spec:
     spec:
       imagePullSecrets:
       - name: "{{ .Values.image.pullSecrets.name }}-msi-acrpull-secret"
-      serviceAccountName: kube-state-logs
+      {{- if eq .Values.deploymentMode "advanced" }}
+      serviceAccountName: {{ include "kube-state-logs.fullname" . }}-cluster
+      {{- else }}
+      serviceAccountName: {{ include "kube-state-logs.fullname" . }}
+      {{- end }}
       securityContext:
         fsGroup: 1000
         runAsNonRoot: true
@@ -49,7 +70,12 @@ spec:
           command: ["/kube-state-logs"]
           args:
             - --log-interval={{ .Values.config.logInterval }}
+            {{- if eq .Values.deploymentMode "advanced" }}
+            - --resources={{ include "kube-state-logs.clusterResources" . }}
+            - --track-unscheduled-pods
+            {{- else }}
             - --resources={{ .Values.config.resources | join "," }}
+            {{- end }}
             {{- if .Values.config.resourceConfigs }}
             - --resource-configs={{ .Values.config.resourceConfigs | join "," }}
             {{- end }}

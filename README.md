@@ -20,6 +20,45 @@ helm install kube-state-logs ./charts/kube-state-logs \
   --create-namespace
 ```
 
+## Deployment Modes
+
+kube-state-logs supports two deployment modes, inspired by [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics):
+
+### Simple Mode (Default)
+
+A single Deployment monitors all configured resources. Best for smaller clusters or when simplicity is preferred.
+
+```yaml
+deploymentMode: simple  # This is the default
+```
+
+### Advanced Mode
+
+Uses a DaemonSet for pod/container resources (one pod per node) and a separate Deployment for all other resources. Each DaemonSet pod only logs pods scheduled on its local node, reducing API server load on large clusters. The Deployment also tracks unscheduled pods.
+
+```yaml
+deploymentMode: advanced
+```
+
+**Advanced mode creates:**
+- `<release>-node` DaemonSet: Logs pods/containers on the local node using `--node` flag
+- `<release>-cluster` Deployment: Logs all other resources + unscheduled pods using `--track-unscheduled-pods` flag
+
+**Separate RBAC:** Each component gets its own ServiceAccount and ClusterRole with minimal required permissions.
+
+**Separate resource limits:** DaemonSet pods use smaller defaults since they only track local pods:
+
+```yaml
+daemonset:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+```
+
 ## Configuration
 
 Configure via Helm values:

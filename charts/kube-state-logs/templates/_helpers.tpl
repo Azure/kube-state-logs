@@ -51,6 +51,28 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Resources for the cluster deployment in advanced mode (excludes pod and container, then adds them back for unscheduled pods)
+*/}}
+{{- define "kube-state-logs.clusterResources" -}}
+{{- $clusterResources := list -}}
+{{- $configuredResources := .Values.config.resources | toStrings -}}
+{{- range $configuredResources -}}
+{{- if and (ne . "pod") (ne . "container") -}}
+{{- $clusterResources = append $clusterResources . -}}
+{{- end -}}
+{{- end -}}
+{{- /* Include pod for unscheduled pods tracking if configured */ -}}
+{{- if or (has "pod" $configuredResources) (has "all" $configuredResources) -}}
+{{- $clusterResources = append $clusterResources "pod" -}}
+{{- end -}}
+{{- /* Include container for unscheduled pods if configured */ -}}
+{{- if or (has "container" $configuredResources) (has "all" $configuredResources) -}}
+{{- $clusterResources = append $clusterResources "container" -}}
+{{- end -}}
+{{- $clusterResources | join "," -}}
+{{- end }}
+
+{{/*
 Convert resource name to proper snapshot name
 */}}
 {{- define "kube-state-logs.resourceSnapshotName" -}}
@@ -93,13 +115,47 @@ Convert resource name to proper snapshot name
 {{- end }}
 
 {{/*
-Generate log-keys annotation from resources list
+Generate log-keys annotation from resources list (used in simple mode)
 */}}
 {{- define "kube-state-logs.logKeysAnnotation" -}}
 {{- $annotation := "" -}}
 {{- $adxMonDestination := .Values.config.adxMonLogDestination -}}
 {{- range $index, $resource := .Values.config.resources -}}
 {{- if $index -}}{{$annotation = printf "%s," $annotation}}{{- end -}}
+{{- $snapshotName := include "kube-state-logs.resourceSnapshotName" $resource -}}
+{{- $annotation = printf "%sResourceType:%s:%s:%s%s" $annotation $resource $adxMonDestination "Kube" $snapshotName -}}
+{{- end -}}
+{{- /* Add CRD configurations to log-keys annotation */ -}}
+{{- if .Values.config.crdConfigs -}}
+{{- range .Values.config.crdConfigs -}}
+{{- $resourceType := .kind | lower -}}
+{{- $tableName := printf "Kube%sSnapshot" .kind -}}
+{{- $annotation = printf "%s,ResourceType:%s:%s:%s" $annotation $resourceType $adxMonDestination $tableName -}}
+{{- end -}}
+{{- end -}}
+{{- $annotation -}}
+{{- end }}
+
+{{/*
+Generate log-keys annotation for node DaemonSet (advanced mode - pod and container only)
+*/}}
+{{- define "kube-state-logs.nodeLogKeysAnnotation" -}}
+{{- $adxMonDestination := .Values.config.adxMonLogDestination -}}
+{{- $annotation := printf "ResourceType:pod:%s:KubePodSnapshot,ResourceType:container:%s:KubeContainerSnapshot" $adxMonDestination $adxMonDestination -}}
+{{- $annotation -}}
+{{- end }}
+
+{{/*
+Generate log-keys annotation for cluster Deployment (advanced mode - all resources, including pod/container for unscheduled)
+*/}}
+{{- define "kube-state-logs.clusterLogKeysAnnotation" -}}
+{{- $annotation := "" -}}
+{{- $adxMonDestination := .Values.config.adxMonLogDestination -}}
+{{- $first := true -}}
+{{- range $resource := .Values.config.resources -}}
+{{- /* In advanced mode, cluster deployment handles all resources (including pod/container for unscheduled) */ -}}
+{{- if not $first -}}{{$annotation = printf "%s," $annotation}}{{- end -}}
+{{- $first = false -}}
 {{- $snapshotName := include "kube-state-logs.resourceSnapshotName" $resource -}}
 {{- $annotation = printf "%sResourceType:%s:%s:%s%s" $annotation $resource $adxMonDestination "Kube" $snapshotName -}}
 {{- end -}}

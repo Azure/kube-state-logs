@@ -1,0 +1,95 @@
+{{- if eq .Values.deploymentMode "advanced" }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "kube-state-logs.fullname" . }}-node
+  labels:
+    {{- include "kube-state-logs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node
+spec:
+  selector:
+    matchLabels:
+      {{- include "kube-state-logs.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: node
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "kube-state-logs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: node
+      {{- if .Values.config.enableADXMonAnnotations }}
+      annotations:
+        kubernetes.azure.com/log-keys: "{{ include "kube-state-logs.nodeLogKeysAnnotation" . }}"
+        adx-mon/scrape: "true"
+        adx-mon/log-parsers: "json"
+        adx-mon/log-destination: "{{ .Values.config.adxMonLogDestination }}:KubeStateLogs"
+      {{- end }}
+    spec:
+      imagePullSecrets:
+      - name: "{{ .Values.image.pullSecrets.name }}-msi-acrpull-secret"
+      serviceAccountName: {{ include "kube-state-logs.fullname" . }}-node
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: kube-state-logs
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "{{ .Values.image.registry }}/{{ .Values.image.org }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+          command: ["/kube-state-logs"]
+          args:
+            - --log-interval={{ .Values.config.logInterval }}
+            {{- $nodeResources := list }}
+            {{- $resources := .Values.config.resources | toStrings }}
+            {{- if or (has "pod" $resources) (has "all" $resources) }}
+            {{- $nodeResources = append $nodeResources "pod" }}
+            {{- end }}
+            {{- if or (has "container" $resources) (has "all" $resources) }}
+            {{- $nodeResources = append $nodeResources "container" }}
+            {{- end }}
+            - --resources={{ $nodeResources | join "," }}
+            - --node=$(NODE_NAME)
+            {{- if .Values.config.namespaces }}
+            - --namespaces={{ .Values.config.namespaces }}
+            {{- end }}
+            - --log-level={{ .Values.config.logLevel }}
+            {{- if .Values.config.containerEnvVars }}
+            - --container-envvars={{ .Values.config.containerEnvVars | join "," }}
+            {{- end }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            limits:
+              cpu: {{ .Values.daemonset.resources.limits.cpu }}
+              memory: {{ .Values.daemonset.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.daemonset.resources.requests.cpu }}
+              memory: {{ .Values.daemonset.resources.requests.memory }}
+          {{- if .Values.env }}
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      tolerations:
+        - operator: Exists
+      {{- with .Values.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

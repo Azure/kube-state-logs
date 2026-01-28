@@ -8,6 +8,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -34,6 +35,7 @@ type Collector struct {
 	handlers      map[string]interfaces.ResourceHandler
 	crdHandlers   map[string]*resources.CRDHandler
 	factory       informers.SharedInformerFactory
+	podFactory    informers.SharedInformerFactory // Separate factory for pods, may have node filtering
 	dynFactory    dynamicinformer.DynamicSharedInformerFactory
 	stopCh        chan struct{}
 	wg            sync.WaitGroup
@@ -90,21 +92,8 @@ func New(cfg *config.Config) (*Collector, error) {
 	// Create logger
 	logger := NewLogger()
 
-	// Create shared informer factory
-	var factory informers.SharedInformerFactory
-	if len(cfg.Namespaces) == 1 {
-		// If only one namespace specified, create namespace-scoped factory
-		factory = informers.NewSharedInformerFactoryWithOptions(client, 0, informers.WithNamespace(cfg.Namespaces[0]))
-		klog.Infof("Created namespace-scoped informer factory for namespace: %s", cfg.Namespaces[0])
-	} else {
-		// For multiple namespaces or cluster-wide, use default factory
-		factory = informers.NewSharedInformerFactory(client, 0)
-		if len(cfg.Namespaces) > 1 {
-			klog.Infof("Created cluster-wide informer factory for multiple namespaces: %v", cfg.Namespaces)
-		} else {
-			klog.Info("Created cluster-wide informer factory for all namespaces")
-		}
-	}
+	// Create informer factories
+	factory, podFactory := createInformerFactories(client, cfg)
 
 	// Create dynamic shared informer factory for CRDs
 	dynFactory := dynamicinformer.NewDynamicSharedInformerFactory(dynClient, 0)
@@ -119,6 +108,7 @@ func New(cfg *config.Config) (*Collector, error) {
 		handlers:      make(map[string]interfaces.ResourceHandler),
 		crdHandlers:   make(map[string]*resources.CRDHandler),
 		factory:       factory,
+		podFactory:    podFactory,
 		dynFactory:    dynFactory,
 		stopCh:        make(chan struct{}),
 	}
@@ -130,6 +120,55 @@ func New(cfg *config.Config) (*Collector, error) {
 	c.registerCRDHandlers()
 
 	return c, nil
+}
+
+// createInformerFactories creates the main informer factory and pod-specific factory.
+// The pod factory may be different from the main factory when node filtering is enabled.
+// Returns (mainFactory, podFactory).
+func createInformerFactories(client kubernetes.Interface, cfg *config.Config) (informers.SharedInformerFactory, informers.SharedInformerFactory) {
+	// Build informer factory options
+	var factoryOpts []informers.SharedInformerOption
+	if len(cfg.Namespaces) == 1 {
+		factoryOpts = append(factoryOpts, informers.WithNamespace(cfg.Namespaces[0]))
+		klog.Infof("Created namespace-scoped informer factory for namespace: %s", cfg.Namespaces[0])
+	} else if len(cfg.Namespaces) > 1 {
+		klog.Infof("Created cluster-wide informer factory for multiple namespaces: %v", cfg.Namespaces)
+	} else {
+		klog.Info("Created cluster-wide informer factory for all namespaces")
+	}
+
+	// Create shared informer factory
+	factory := informers.NewSharedInformerFactoryWithOptions(client, 0, factoryOpts...)
+
+	// Create a separate pod informer factory for node-filtered or unscheduled-pod scenarios.
+	// This is used by pod and container handlers when --node or --track-unscheduled-pods is set.
+	var podFactory informers.SharedInformerFactory
+	if cfg.Node != "" {
+		// Filter to pods scheduled on this specific node
+		podFactoryOpts := append(factoryOpts, informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+			opts.FieldSelector = "spec.nodeName=" + cfg.Node
+		}))
+		podFactory = informers.NewSharedInformerFactoryWithOptions(client, 0, podFactoryOpts...)
+		klog.Infof("Created node-filtered pod informer factory for node: %s", cfg.Node)
+	} else if cfg.TrackUnscheduledPods {
+		// Filter to pods that have not yet been scheduled (spec.nodeName is empty)
+		podFactoryOpts := append(factoryOpts, informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+			opts.FieldSelector = "spec.nodeName="
+		}))
+		podFactory = informers.NewSharedInformerFactoryWithOptions(client, 0, podFactoryOpts...)
+		klog.Info("Created unscheduled-pods informer factory (spec.nodeName='')")
+	} else {
+		// No special filtering - use the main factory
+		podFactory = factory
+	}
+
+	return factory, podFactory
+}
+
+// shouldUsePodFactory returns true if the given resource type should use the pod factory
+// (which may have node filtering applied) instead of the main factory.
+func shouldUsePodFactory(resourceType string) bool {
+	return resourceType == "pod" || resourceType == "container"
 }
 
 // registerHandlers registers all available resource handlers
@@ -269,8 +308,14 @@ func (c *Collector) Run(ctx context.Context) error {
 			continue
 		}
 
+		// Use the podFactory for pod and container handlers (supports node filtering)
+		factoryToUse := c.factory
+		if shouldUsePodFactory(resourceType) {
+			factoryToUse = c.podFactory
+		}
+
 		// Setup informer with no resync period
-		if err := handler.SetupInformer(c.factory, c.logger, 0); err != nil {
+		if err := handler.SetupInformer(factoryToUse, c.logger, 0); err != nil {
 			klog.Errorf("Failed to setup informer for %s: %v", resourceType, err)
 			continue
 		}
@@ -290,8 +335,12 @@ func (c *Collector) Run(ctx context.Context) error {
 		close(c.stopCh)
 	}()
 
-	// Start the informer factory
+	// Start the informer factories
 	c.factory.Start(c.stopCh)
+	// Start the pod factory if it's different from the main factory (node filtering enabled)
+	if c.podFactory != c.factory {
+		c.podFactory.Start(c.stopCh)
+	}
 	c.dynFactory.Start(c.stopCh)
 
 	// Wait for all informers to sync
@@ -300,6 +349,17 @@ func (c *Collector) Run(ctx context.Context) error {
 	for resourceType, isSynced := range synced {
 		if !isSynced {
 			return fmt.Errorf("failed to sync informer for %v", resourceType)
+		}
+	}
+
+	// Wait for pod factory informers to sync if different from main factory
+	if c.podFactory != c.factory {
+		klog.Info("Waiting for pod factory informers to sync...")
+		podSynced := c.podFactory.WaitForCacheSync(c.stopCh)
+		for resourceType, isSynced := range podSynced {
+			if !isSynced {
+				return fmt.Errorf("failed to sync pod informer for %v", resourceType)
+			}
 		}
 	}
 

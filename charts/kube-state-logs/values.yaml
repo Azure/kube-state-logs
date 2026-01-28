@@ -12,6 +12,11 @@ image:
   pullSecrets:
     name:
 
+# Deployment mode: "simple" or "advanced"
+# - simple: Single Deployment that monitors all resources (default)
+# - advanced: DaemonSet for pod/container (per-node), Deployment for other resources
+deploymentMode: simple
+
 # Application configuration
 config:
   logInterval: "1m"
@@ -38,7 +43,7 @@ config:
   containerEnvVars:
     - "GOMAXPROCS"
 
-# Resource limits
+# Resource limits for deployment (simple mode) or cluster deployment (advanced mode)
 resources:
   limits:
     cpu: 500m
@@ -46,6 +51,17 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
+
+# Resource limits for DaemonSet pods (advanced mode only)
+# These can be smaller since each pod only tracks pods on its local node
+daemonset:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
 
 # Node selection and scheduling
 nodeSelector: {}

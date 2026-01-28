@@ -32,6 +32,13 @@ type Config struct {
 	// ContainerEnvVars is the list of environment variable names to capture from containers.
 	// If empty, no environment variables will be collected.
 	ContainerEnvVars []string
+	// Node filters pods to only those scheduled on this specific node (by node name).
+	// Used for DaemonSet deployments where each pod logs only local pods.
+	// If empty, no node filtering is applied.
+	Node string
+	// TrackUnscheduledPods when true, collects only pods that have not yet been scheduled
+	// (spec.nodeName is empty). Used by the cluster deployment in advanced mode.
+	TrackUnscheduledPods bool
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types
