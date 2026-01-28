@@ -438,3 +438,36 @@ func TestParseResourceConfigs(t *testing.T) {
 		})
 	}
 }
+
+func TestConfig_NodeFilteringFields(t *testing.T) {
+	tests := []struct {
+		name                 string
+		node                 string
+		trackUnscheduledPods bool
+	}{
+		{name: "empty node filter"},
+		{name: "node filter set", node: "worker-node-1"},
+		{name: "track unscheduled pods enabled", trackUnscheduledPods: true},
+		{name: "both set", node: "node-abc", trackUnscheduledPods: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				LogInterval:          time.Minute,
+				Node:                 tt.node,
+				TrackUnscheduledPods: tt.trackUnscheduledPods,
+			}
+
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("Validate() returned error: %v", err)
+			}
+			if cfg.Node != tt.node {
+				t.Errorf("Node = %q, want %q", cfg.Node, tt.node)
+			}
+			if cfg.TrackUnscheduledPods != tt.trackUnscheduledPods {
+				t.Errorf("TrackUnscheduledPods = %v, want %v", cfg.TrackUnscheduledPods, tt.trackUnscheduledPods)
+			}
+		})
+	}
+}
