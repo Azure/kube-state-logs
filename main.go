@@ -20,15 +20,17 @@ import (
 func main() {
 	// Parse command line flags
 	var (
-		logInterval      = flag.Duration("log-interval", 1*time.Minute, "Default interval between log outputs")
-		resources        = flag.String("resources", "pod,container,service,node,deployment,job,cronjob,configmap,secret,persistentvolumeclaim,ingress,horizontalpodautoscaler,serviceaccount,endpoints,persistentvolume,resourcequota,poddisruptionbudget,storageclass,networkpolicy,replicationcontroller,limitrange,lease,role,clusterrole,rolebinding,clusterrolebinding,volumeattachment,certificatesigningrequest,namespace,daemonset,statefulset,replicaset,mutatingwebhookconfiguration,validatingwebhookconfiguration,ingressclass,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding", "Comma-separated list of resources to monitor")
-		resourceConfigs  = flag.String("resource-configs", "", "Comma-separated list of resource configs: 'resource:interval[:labels=...][:fields=...][:promote-node-labels=label|label]'. Use '\\\\,' to escape commas in selectors (e.g., 'configmap:1m:labels=app=foo\\\\,env=prod'). If not specified, uses log-interval for all resources.")
-		crdConfigs       = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
-		namespaces       = flag.String("namespaces", "", "Comma-separated list of namespaces to monitor (empty for all)")
-		logLevel         = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
-		kubeconfig       = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
-		containerEnvVars = flag.String("container-envvars", "", "Comma-separated list of environment variable names to capture from containers (e.g., 'GOMAXPROCS,MY_FLAG'). Empty disables capturing.")
-		configMapValues  = flag.Bool("configmap-include-values", false, "Include ConfigMap data values (data only, no binary data)")
+		logInterval          = flag.Duration("log-interval", 1*time.Minute, "Default interval between log outputs")
+		resources            = flag.String("resources", "pod,container,service,node,deployment,job,cronjob,configmap,secret,persistentvolumeclaim,ingress,horizontalpodautoscaler,serviceaccount,endpoints,persistentvolume,resourcequota,poddisruptionbudget,storageclass,networkpolicy,replicationcontroller,limitrange,lease,role,clusterrole,rolebinding,clusterrolebinding,volumeattachment,certificatesigningrequest,namespace,daemonset,statefulset,replicaset,mutatingwebhookconfiguration,validatingwebhookconfiguration,ingressclass,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding", "Comma-separated list of resources to monitor")
+		resourceConfigs      = flag.String("resource-configs", "", "Comma-separated list of resource configs: 'resource:interval[:labels=...][:fields=...][:promote-node-labels=label|label]'. Use '\\\\,' to escape commas in selectors (e.g., 'configmap:1m:labels=app=foo\\\\,env=prod'). If not specified, uses log-interval for all resources.")
+		crdConfigs           = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
+		namespaces           = flag.String("namespaces", "", "Comma-separated list of namespaces to monitor (empty for all)")
+		logLevel             = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+		kubeconfig           = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
+		containerEnvVars     = flag.String("container-envvars", "", "Comma-separated list of environment variable names to capture from containers (e.g., 'GOMAXPROCS,MY_FLAG'). Empty disables capturing.")
+		configMapValues      = flag.Bool("configmap-include-values", false, "Include ConfigMap data values (data only, no binary data)")
+		node                 = flag.String("node", "", "Filter pods to only those scheduled on this node (used for DaemonSet deployment mode)")
+		trackUnscheduledPods = flag.Bool("track-unscheduled-pods", false, "Only collect pods that have not yet been scheduled to a node (used with advanced deployment mode)")
 	)
 	flag.Parse()
 
@@ -66,6 +68,8 @@ func main() {
 		Kubeconfig:             *kubeconfig,
 		ContainerEnvVars:       config.ParseContainerEnvVars(*containerEnvVars),
 		ConfigMapIncludeValues: *configMapValues,
+		Node:                   *node,
+		TrackUnscheduledPods:   *trackUnscheduledPods,
 	}
 
 	// Validate configuration to prevent runtime issues
