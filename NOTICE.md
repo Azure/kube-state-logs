@@ -213,7 +213,3 @@ Inspiration taken from Kube State Metrics project.
    See the License for the specific language governing permissions and
    limitations under the License.
 ```
-
-Open Source License/Copyright Notice. [Include the text of each license found in that component’s source code, including copyright statements included in that license (e.g., Copyright © 2018 XYZ Corporation). The license is typically in a file called “LICENSE” or “COPYING.”]
-
-Additional Attribution (if any). [Usually found in a component’s “AUTHORS”, “NOTICES”, or “CONTRIBUTORS” (or some other similar variant) file.]
