@@ -151,3 +151,65 @@ func TestParseContainerEnvVars(t *testing.T) {
 		}
 	}
 }
+
+func TestConfig_NodeFilteringFields(t *testing.T) {
+	tests := []struct {
+		name                 string
+		node                 string
+		trackUnscheduledPods bool
+		wantNode             string
+		wantTrackUnscheduled bool
+	}{
+		{
+			name:                 "Empty node filter",
+			node:                 "",
+			trackUnscheduledPods: false,
+			wantNode:             "",
+			wantTrackUnscheduled: false,
+		},
+		{
+			name:                 "Node filter set",
+			node:                 "worker-node-1",
+			trackUnscheduledPods: false,
+			wantNode:             "worker-node-1",
+			wantTrackUnscheduled: false,
+		},
+		{
+			name:                 "Track unscheduled pods enabled",
+			node:                 "",
+			trackUnscheduledPods: true,
+			wantNode:             "",
+			wantTrackUnscheduled: true,
+		},
+		{
+			name:                 "Both set (node takes precedence in practice)",
+			node:                 "node-abc",
+			trackUnscheduledPods: true,
+			wantNode:             "node-abc",
+			wantTrackUnscheduled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				LogInterval:          time.Minute,
+				Node:                 tt.node,
+				TrackUnscheduledPods: tt.trackUnscheduledPods,
+			}
+
+			// Validate should not error
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("Validate() returned error: %v", err)
+			}
+
+			// Fields should be preserved
+			if cfg.Node != tt.wantNode {
+				t.Errorf("Node = %q, want %q", cfg.Node, tt.wantNode)
+			}
+			if cfg.TrackUnscheduledPods != tt.wantTrackUnscheduled {
+				t.Errorf("TrackUnscheduledPods = %v, want %v", cfg.TrackUnscheduledPods, tt.wantTrackUnscheduled)
+			}
+		})
+	}
+}

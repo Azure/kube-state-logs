@@ -184,10 +184,16 @@ make push
 
 Key configuration options (set via Helm values or environment):
 
+- `deploymentMode` - Deployment architecture: `simple` (single Deployment) or `advanced` (DaemonSet + Deployment)
 - `logInterval` - How often to log resource state (default: `1m`)
 - `logLevel` - Log verbosity: debug, info, warn, error
 - `namespaces` - Comma-separated namespaces to monitor (empty = all)
 - `resources` - Which resource types to monitor
+
+### Command-Line Flags for Node Filtering
+
+- `--node=<name>` - Filter pods to only those scheduled on this node (used by DaemonSet in advanced mode)
+- `--track-unscheduled-pods` - Only collect pods not yet scheduled to a node (used by Deployment in advanced mode)
 
 ## Common Tasks
 
@@ -203,10 +209,23 @@ Key configuration options (set via Helm values or environment):
    }
    ```
 4. Add tests in `pkg/collector/resources/newresource_test.go`
-5. Update Helm chart RBAC in `charts/kube-state-logs/templates/rbac.yaml` if new permissions needed
+5. Update Helm chart RBAC in `charts/kube-state-logs/templates/rbac.yaml` if new permissions needed (update both simple and advanced mode sections)
 6. **For CamelCase resources** (e.g., `PodDisruptionBudget`, `NetworkPolicy`): Add a mapping in the `resourceSnapshotName` helper in `charts/kube-state-logs/templates/_helpers.tpl` to convert the lowercase resource name to the proper PascalCase snapshot name (e.g., `poddisruptionbudget` → `PodDisruptionBudgetSnapshot`)
 7. Document the new resource in `docs/resources.md` under the appropriate category
 8. If the resource should be enabled by default, add it to `config.resources` in `charts/kube-state-logs/values.yaml` and update docs accordingly.
+
+### Working with Deployment Modes
+
+The Helm chart supports two deployment modes controlled by `deploymentMode`:
+
+- **simple**: Single Deployment with all resources (default)
+- **advanced**: DaemonSet for pod/container + Deployment for other resources
+
+When modifying Helm templates:
+- `templates/deployment.yaml` - Handles both simple mode (full deployment) and advanced mode (cluster deployment)
+- `templates/daemonset.yaml` - Only rendered in advanced mode, handles pod/container with node filtering
+- `templates/rbac.yaml` - Contains conditional RBAC for both modes (simple uses single set, advanced uses separate -node and -cluster RBAC)
+- `templates/_helpers.tpl` - Contains helpers for resource filtering (`clusterResources`) and ADX-Mon annotations (`nodeLogKeysAnnotation`, `clusterLogKeysAnnotation`)
 
 ### Modifying Log Output Format
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -22,21 +23,25 @@ import (
 	"github.com/azure/kube-state-logs/pkg/collector/resources"
 	"github.com/azure/kube-state-logs/pkg/config"
 	"github.com/azure/kube-state-logs/pkg/interfaces"
+	"github.com/azure/kube-state-logs/pkg/kubelet"
 )
 
 // Collector handles the collection and logging of Kubernetes resource state
 type Collector struct {
-	config        *config.Config
-	client        *kubernetes.Clientset
-	dynClient     dynamic.Interface
-	metricsClient metricsclientset.Interface
-	logger        interfaces.Logger
-	handlers      map[string]interfaces.ResourceHandler
-	crdHandlers   map[string]*resources.CRDHandler
-	factory       informers.SharedInformerFactory
-	dynFactory    dynamicinformer.DynamicSharedInformerFactory
-	stopCh        chan struct{}
-	wg            sync.WaitGroup
+	config          *config.Config
+	client          *kubernetes.Clientset
+	dynClient       dynamic.Interface
+	metricsClient   metricsclientset.Interface
+	logger          interfaces.Logger
+	handlers        map[string]interfaces.ResourceHandler
+	kubeletHandlers map[string]interfaces.KubeletHandler // Kubelet-based handlers for pod/container
+	crdHandlers     map[string]*resources.CRDHandler
+	factory         informers.SharedInformerFactory
+	podFactory      informers.SharedInformerFactory // Separate factory for pods, may have node filtering
+	dynFactory      dynamicinformer.DynamicSharedInformerFactory
+	kubeletClient   *kubelet.Client // Kubelet API client (nil if not using kubelet mode)
+	stopCh          chan struct{}
+	wg              sync.WaitGroup
 }
 
 // validateTickerInterval ensures the interval is positive to prevent time.NewTicker panics
@@ -90,37 +95,41 @@ func New(cfg *config.Config) (*Collector, error) {
 	// Create logger
 	logger := NewLogger()
 
-	// Create shared informer factory
-	var factory informers.SharedInformerFactory
-	if len(cfg.Namespaces) == 1 {
-		// If only one namespace specified, create namespace-scoped factory
-		factory = informers.NewSharedInformerFactoryWithOptions(client, 0, informers.WithNamespace(cfg.Namespaces[0]))
-		klog.Infof("Created namespace-scoped informer factory for namespace: %s", cfg.Namespaces[0])
-	} else {
-		// For multiple namespaces or cluster-wide, use default factory
-		factory = informers.NewSharedInformerFactory(client, 0)
-		if len(cfg.Namespaces) > 1 {
-			klog.Infof("Created cluster-wide informer factory for multiple namespaces: %v", cfg.Namespaces)
-		} else {
-			klog.Info("Created cluster-wide informer factory for all namespaces")
-		}
-	}
+	// Create informer factories (not used for pod/container in kubelet mode)
+	factory, podFactory := createInformerFactories(client, cfg)
 
 	// Create dynamic shared informer factory for CRDs
 	dynFactory := dynamicinformer.NewDynamicSharedInformerFactory(dynClient, 0)
 
+	// Create kubelet client if kubelet mode is enabled
+	var kubeletClient *kubelet.Client
+	if cfg.UseKubeletAPI {
+		kubeletClient, err = kubelet.NewClient(kubelet.ClientConfig{
+			NodeIP:             cfg.NodeIP,
+			Port:               cfg.KubeletPort,
+			InsecureSkipVerify: true, // Kubelet uses self-signed certs
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create kubelet client: %w", err)
+		}
+		klog.Infof("Using kubelet API at %s:%d for pod/container collection", cfg.NodeIP, cfg.KubeletPort)
+	}
+
 	// Create collector
 	c := &Collector{
-		config:        cfg,
-		client:        client,
-		dynClient:     dynClient,
-		metricsClient: metricsClient,
-		logger:        logger,
-		handlers:      make(map[string]interfaces.ResourceHandler),
-		crdHandlers:   make(map[string]*resources.CRDHandler),
-		factory:       factory,
-		dynFactory:    dynFactory,
-		stopCh:        make(chan struct{}),
+		config:          cfg,
+		client:          client,
+		dynClient:       dynClient,
+		metricsClient:   metricsClient,
+		logger:          logger,
+		handlers:        make(map[string]interfaces.ResourceHandler),
+		kubeletHandlers: make(map[string]interfaces.KubeletHandler),
+		crdHandlers:     make(map[string]*resources.CRDHandler),
+		factory:         factory,
+		podFactory:      podFactory,
+		dynFactory:      dynFactory,
+		kubeletClient:   kubeletClient,
+		stopCh:          make(chan struct{}),
 	}
 
 	// Register resource handlers
@@ -132,9 +141,78 @@ func New(cfg *config.Config) (*Collector, error) {
 	return c, nil
 }
 
+// createInformerFactories creates the main informer factory and pod-specific factory.
+// The pod factory may be different from the main factory when node filtering is enabled.
+// Returns (mainFactory, podFactory). podFactory will be nil if using kubelet API mode.
+func createInformerFactories(client kubernetes.Interface, cfg *config.Config) (informers.SharedInformerFactory, informers.SharedInformerFactory) {
+	// Build informer factory options
+	var factoryOpts []informers.SharedInformerOption
+	if len(cfg.Namespaces) == 1 {
+		factoryOpts = append(factoryOpts, informers.WithNamespace(cfg.Namespaces[0]))
+		klog.Infof("Created namespace-scoped informer factory for namespace: %s", cfg.Namespaces[0])
+	} else if len(cfg.Namespaces) > 1 {
+		klog.Infof("Created cluster-wide informer factory for multiple namespaces: %v", cfg.Namespaces)
+	} else {
+		klog.Info("Created cluster-wide informer factory for all namespaces")
+	}
+
+	// Create shared informer factory
+	factory := informers.NewSharedInformerFactoryWithOptions(client, 0, factoryOpts...)
+
+	// If using kubelet API, we don't need a pod factory since pod/container
+	// will be collected via kubelet API, not informers
+	if cfg.UseKubeletAPI {
+		return factory, nil
+	}
+
+	// Create a separate pod informer factory for node-filtered or unscheduled-pod scenarios.
+	// This is used by pod and container handlers when --node or --track-unscheduled-pods is set.
+	var podFactory informers.SharedInformerFactory
+	if cfg.Node != "" {
+		// Filter to pods scheduled on this specific node
+		podFactoryOpts := append(factoryOpts, informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+			opts.FieldSelector = "spec.nodeName=" + cfg.Node
+		}))
+		podFactory = informers.NewSharedInformerFactoryWithOptions(client, 0, podFactoryOpts...)
+		klog.Infof("Created node-filtered pod informer factory for node: %s", cfg.Node)
+	} else if cfg.TrackUnscheduledPods {
+		// Filter to pods that have not yet been scheduled (spec.nodeName is empty)
+		podFactoryOpts := append(factoryOpts, informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+			opts.FieldSelector = "spec.nodeName="
+		}))
+		podFactory = informers.NewSharedInformerFactoryWithOptions(client, 0, podFactoryOpts...)
+		klog.Info("Created unscheduled-pods informer factory (spec.nodeName='')")
+	} else {
+		// No special filtering - use the main factory
+		podFactory = factory
+	}
+
+	return factory, podFactory
+}
+
+// shouldUsePodFactory returns true if the given resource type should use the pod factory
+// (which may have node filtering applied) instead of the main factory.
+func shouldUsePodFactory(resourceType string) bool {
+	return resourceType == "pod" || resourceType == "container"
+}
+
+// shouldUseKubeletHandler returns true if the given resource type should use
+// kubelet handlers instead of informer-based handlers.
+func (c *Collector) shouldUseKubeletHandler(resourceType string) bool {
+	return c.kubeletClient != nil && (resourceType == "pod" || resourceType == "container")
+}
+
 // registerHandlers registers all available resource handlers
 func (c *Collector) registerHandlers() {
-	// Register resource handlers
+	// If using kubelet mode, register kubelet handlers for pod/container
+	if c.kubeletClient != nil {
+		c.kubeletHandlers["pod"] = resources.NewKubeletPodHandler(c.kubeletClient)
+		c.kubeletHandlers["container"] = resources.NewKubeletContainerHandler(c.kubeletClient, c.metricsClient, c.config.ContainerEnvVars)
+		klog.Info("Registered kubelet-based handlers for pod and container")
+	}
+
+	// Register resource handlers (informer-based)
+	// Note: pod and container handlers are still registered but won't be used in kubelet mode
 	handlers := map[string]interfaces.ResourceHandler{
 		"pod":                              resources.NewPodHandler(c.client),
 		"container":                        resources.NewContainerHandler(c.client, c.metricsClient, c.config.ContainerEnvVars),
@@ -263,14 +341,26 @@ func (c *Collector) Run(ctx context.Context) error {
 			continue
 		}
 
+		// Skip informer setup for pod/container if using kubelet mode
+		if c.shouldUseKubeletHandler(resourceType) {
+			klog.Infof("Skipping informer setup for %s (using kubelet API)", resourceType)
+			continue
+		}
+
 		handler, exists := c.handlers[resourceType]
 		if !exists {
 			klog.Warningf("No handler found for resource type: %s", resourceType)
 			continue
 		}
 
+		// Use the podFactory for pod and container handlers (supports node filtering)
+		factoryToUse := c.factory
+		if shouldUsePodFactory(resourceType) {
+			factoryToUse = c.podFactory
+		}
+
 		// Setup informer with no resync period
-		if err := handler.SetupInformer(c.factory, c.logger, 0); err != nil {
+		if err := handler.SetupInformer(factoryToUse, c.logger, 0); err != nil {
 			klog.Errorf("Failed to setup informer for %s: %v", resourceType, err)
 			continue
 		}
@@ -290,8 +380,12 @@ func (c *Collector) Run(ctx context.Context) error {
 		close(c.stopCh)
 	}()
 
-	// Start the informer factory
+	// Start the informer factories
 	c.factory.Start(c.stopCh)
+	// Start the pod factory if it exists and is different from the main factory
+	if c.podFactory != nil && c.podFactory != c.factory {
+		c.podFactory.Start(c.stopCh)
+	}
 	c.dynFactory.Start(c.stopCh)
 
 	// Wait for all informers to sync
@@ -300,6 +394,17 @@ func (c *Collector) Run(ctx context.Context) error {
 	for resourceType, isSynced := range synced {
 		if !isSynced {
 			return fmt.Errorf("failed to sync informer for %v", resourceType)
+		}
+	}
+
+	// Wait for pod factory informers to sync if it exists and is different from main factory
+	if c.podFactory != nil && c.podFactory != c.factory {
+		klog.Info("Waiting for pod factory informers to sync...")
+		podSynced := c.podFactory.WaitForCacheSync(c.stopCh)
+		for resourceType, isSynced := range podSynced {
+			if !isSynced {
+				return fmt.Errorf("failed to sync pod informer for %v", resourceType)
+			}
 		}
 	}
 
@@ -357,7 +462,39 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 
 	// Start tickers for all resources
 	for resourceName, interval := range resourceIntervals {
-		// Check if we have a handler for this resource
+		// Check if this should use a kubelet handler
+		if c.shouldUseKubeletHandler(resourceName) {
+			kubeletHandler, exists := c.kubeletHandlers[resourceName]
+			if !exists {
+				klog.Warningf("No kubelet handler found for resource type: %s", resourceName)
+				continue
+			}
+
+			klog.Infof("Starting kubelet ticker for %s with interval %v", resourceName, interval)
+
+			c.wg.Add(1)
+			go func(name string, tickerInterval time.Duration, h interfaces.KubeletHandler) {
+				defer c.wg.Done()
+
+				validatedInterval := validateTickerInterval(tickerInterval, name)
+				ticker := time.NewTicker(validatedInterval)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						if err := c.collectAndLogKubeletResource(ctx, name, h); err != nil {
+							klog.Errorf("Kubelet collection failed for %s: %v", name, err)
+						}
+					}
+				}
+			}(resourceName, interval, kubeletHandler)
+			continue
+		}
+
+		// Use informer-based handler
 		handler, exists := c.handlers[resourceName]
 		if !exists {
 			klog.Warningf("No handler found for resource type: %s", resourceName)
@@ -446,6 +583,24 @@ func (c *Collector) collectAndLogResource(ctx context.Context, resourceName stri
 	}
 
 	klog.V(2).Infof("Collected and logged %d entries for %s", len(entries), resourceName)
+	return nil
+}
+
+// collectAndLogKubeletResource collects and logs data for a kubelet-based resource
+func (c *Collector) collectAndLogKubeletResource(ctx context.Context, resourceName string, handler interfaces.KubeletHandler) error {
+	entries, err := handler.Collect(ctx, c.config.Namespaces)
+	if err != nil {
+		return fmt.Errorf("failed to collect %s from kubelet: %w", resourceName, err)
+	}
+
+	// Log all collected entries
+	for _, entry := range entries {
+		if err := c.logger.Log(entry); err != nil {
+			klog.Errorf("Failed to log entry for %s: %v", resourceName, err)
+		}
+	}
+
+	klog.V(2).Infof("Collected and logged %d entries for %s (kubelet)", len(entries), resourceName)
 	return nil
 }
 

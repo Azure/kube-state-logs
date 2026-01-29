@@ -161,6 +161,12 @@ config:
     - "MY_APP_VERSION"
 ```
 
+### Pod and Container Node Filtering
+
+In [advanced deployment mode](../README.md#deployment-modes), `pod` and `container` resources support node-based filtering. The DaemonSet pods use the `--node` flag to filter pods to only those scheduled on the local node. The Deployment uses `--track-unscheduled-pods` to capture pods not yet assigned to a node.
+
+This reduces API server load on large clusters by distributing pod watching across nodes.
+
 ### Secret Resource
 
 For security, the `secret` resource only logs metadata (name, namespace, type, labels, annotations) - **secret values are never logged**.
