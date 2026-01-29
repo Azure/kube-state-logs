@@ -62,6 +62,11 @@ daemonset:
     requests:
       cpu: 50m
       memory: 64Mi
+  # Use kubelet API instead of Kubernetes API for pod/container collection
+  # This reduces API server load by polling the local kubelet directly
+  useKubeletAPI: false
+  # Port for the kubelet API (default: 10250)
+  kubeletPort: 10250
 
 # Node selection and scheduling
 nodeSelector: {}

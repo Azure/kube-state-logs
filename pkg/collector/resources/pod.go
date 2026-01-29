@@ -72,6 +72,12 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 
 // createLogEntry creates a PodData from a pod
 func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
+	return CreatePodLogEntry(pod)
+}
+
+// CreatePodLogEntry creates a PodData from a pod.
+// This is exported for use by the kubelet handler.
+func CreatePodLogEntry(pod *corev1.Pod) types.PodData {
 	// Determine QoS class
 	qosClass := string(pod.Status.QOSClass)
 	if qosClass == "" {

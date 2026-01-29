@@ -60,6 +60,11 @@ spec:
             {{- end }}
             - --resources={{ $nodeResources | join "," }}
             - --node=$(NODE_NAME)
+            {{- if .Values.daemonset.useKubeletAPI }}
+            - --use-kubelet-api
+            - --node-ip=$(NODE_IP)
+            - --kubelet-port={{ .Values.daemonset.kubeletPort }}
+            {{- end }}
             {{- if .Values.config.namespaces }}
             - --namespaces={{ .Values.config.namespaces }}
             {{- end }}
@@ -72,6 +77,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            {{- if .Values.daemonset.useKubeletAPI }}
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            {{- end }}
           resources:
             limits:
               cpu: {{ .Values.daemonset.resources.limits.cpu }}

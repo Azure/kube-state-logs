@@ -39,6 +39,15 @@ type Config struct {
 	// TrackUnscheduledPods when true, collects only pods that have not yet been scheduled
 	// (spec.nodeName is empty). Used by the cluster deployment in advanced mode.
 	TrackUnscheduledPods bool
+	// UseKubeletAPI when true, uses the kubelet API instead of the Kubernetes API
+	// for pod/container collection. Only applicable when Node is set (DaemonSet mode).
+	// The kubelet API is polled since it doesn't support watches.
+	UseKubeletAPI bool
+	// KubeletPort is the port for the kubelet API (default: 10250).
+	KubeletPort int
+	// NodeIP is the IP address of the node for kubelet API access.
+	// Required when UseKubeletAPI is true.
+	NodeIP string
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types
@@ -224,6 +233,20 @@ func (c *Config) Validate() error {
 			klog.Warningf("Invalid interval %v for resource %s, setting to default LogInterval %v",
 				c.ResourceConfigs[i].Interval, c.ResourceConfigs[i].Name, c.LogInterval)
 			c.ResourceConfigs[i].Interval = c.LogInterval
+		}
+	}
+
+	// Validate kubelet API configuration
+	if c.UseKubeletAPI {
+		if c.Node == "" {
+			return fmt.Errorf("--node is required when --use-kubelet-api is enabled")
+		}
+		if c.NodeIP == "" {
+			return fmt.Errorf("--node-ip is required when --use-kubelet-api is enabled")
+		}
+		if c.KubeletPort <= 0 || c.KubeletPort > 65535 {
+			klog.Warningf("Invalid kubelet port %d, setting to default 10250", c.KubeletPort)
+			c.KubeletPort = 10250
 		}
 	}
 
