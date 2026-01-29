@@ -31,6 +31,9 @@ func main() {
 		configMapValues      = flag.Bool("configmap-include-values", false, "Include ConfigMap data values (data only, no binary data)")
 		node                 = flag.String("node", "", "Filter pods to only those scheduled on this node (used for DaemonSet deployment mode)")
 		trackUnscheduledPods = flag.Bool("track-unscheduled-pods", false, "Only collect pods that have not yet been scheduled to a node (used with advanced deployment mode)")
+		useKubeletAPI        = flag.Bool("use-kubelet-api", false, "Use kubelet API instead of Kubernetes API for pod/container collection (requires --node and --node-ip)")
+		kubeletPort          = flag.Int("kubelet-port", 10250, "Port for the kubelet API")
+		nodeIP               = flag.String("node-ip", "", "IP address of the node for kubelet API access (required when --use-kubelet-api is set)")
 	)
 	flag.Parse()
 
@@ -70,6 +73,9 @@ func main() {
 		ConfigMapIncludeValues: *configMapValues,
 		Node:                   *node,
 		TrackUnscheduledPods:   *trackUnscheduledPods,
+		UseKubeletAPI:          *useKubeletAPI,
+		KubeletPort:            *kubeletPort,
+		NodeIP:                 *nodeIP,
 	}
 
 	// Validate configuration to prevent runtime issues

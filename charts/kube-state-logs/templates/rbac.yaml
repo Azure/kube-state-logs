@@ -267,10 +267,17 @@ metadata:
     app.kubernetes.io/component: node
 rules:
 {{- $resources := .Values.config.resources | toStrings }}
+{{- if .Values.daemonset.useKubeletAPI }}
+  # When using kubelet API, we need nodes/proxy permission to access kubelet
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
+{{- else }}
 {{- if or (has "pod" $resources) (has "container" $resources) (has "all" $resources) }}
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["list", "watch"]
+{{- end }}
 {{- end }}
 {{- if or (has "container" $resources) (has "all" $resources) }}
   - apiGroups: ["metrics.k8s.io"]
