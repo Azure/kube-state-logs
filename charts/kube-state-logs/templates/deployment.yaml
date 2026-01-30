@@ -27,8 +27,10 @@ spec:
         adx-mon/log-destination: "{{ .Values.config.adxMonLogDestination }}:KubeStateLogs"
       {{- end }}
     spec:
+      {{- if .Values.image.pullSecrets.name }}
       imagePullSecrets:
-      - name: "{{ .Values.image.pullSecrets.name }}-msi-acrpull-secret"
+      - name: "{{ .Values.image.pullSecrets.name }}"
+      {{- end }}
       serviceAccountName: kube-state-logs
       securityContext:
         fsGroup: 1000
