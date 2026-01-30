@@ -15,6 +15,17 @@ This project is heavily inspired by [kube-state-metrics](https://github.com/kube
 Requires Helm 3.x (tested with v3.20.0). Helm 4 compatibility has not yet been validated.
 
 ```bash
+helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts/kube-state-logs \
+  --version 1.0.0 \
+  --namespace monitoring \
+  --create-namespace
+```
+
+### Installing from Source
+
+If you prefer to install from a local checkout:
+
+```bash
 helm install kube-state-logs ./charts/kube-state-logs \
   --namespace monitoring \
   --create-namespace
