@@ -100,16 +100,16 @@ docker pull ghcr.io/azure/kube-state-logs:v1
 
 ```bash
 # Latest from main
-helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts --version 0.0.0-latest
+helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts/kube-state-logs --version 0.0.0-latest
 
 # Specific version
-helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts --version 1.2.3
+helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts/kube-state-logs --version 1.2.3
 
 # Latest in 1.x series
-helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts --version 1.0.0-latest
+helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts/kube-state-logs --version 1.0.0-latest
 
 # Latest in 1.2.x series  
-helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts --version 1.2.0-latest
+helm install kube-state-logs oci://ghcr.io/azure/kube-state-logs/charts/kube-state-logs --version 1.2.0-latest
 ```
 
 ## Architecture
@@ -175,7 +175,7 @@ flowchart TD
 ### Registry Paths
 
 - Docker images: `ghcr.io/azure/kube-state-logs`
-- Helm charts: `ghcr.io/azure/kube-state-logs/charts`
+- Helm charts: `ghcr.io/azure/kube-state-logs/charts/kube-state-logs`
 
 ## Troubleshooting
 
