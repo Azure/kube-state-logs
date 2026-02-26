@@ -7,6 +7,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -162,10 +163,12 @@ func (h *NodeHandler) createLogEntry(node *corev1.Node) types.NodeData {
 	data := types.NodeData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "node",
-				Name:             utils.ExtractName(node),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(node),
+				Timestamp:         time.Now(),
+				ResourceType:      "node",
+				Name:              utils.ExtractName(node),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(node),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(node),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(node),
@@ -198,14 +201,13 @@ func (h *NodeHandler) createLogEntry(node *corev1.Node) types.NodeData {
 		UsageMemoryBytes:  memoryUsage,
 
 		// All other conditions (excluding the top-level ones)
-		Conditions:        conditions,
-		InternalIP:        internalIP,
-		ExternalIP:        externalIP,
-		Hostname:          hostname,
-		Unschedulable:     &unschedulable,
-		Role:              nodeRole,
-		Taints:            taints,
-		DeletionTimestamp: utils.ExtractDeletionTimestamp(node),
+		Conditions:    conditions,
+		InternalIP:    internalIP,
+		ExternalIP:    externalIP,
+		Hostname:      hostname,
+		Unschedulable: &unschedulable,
+		Role:          nodeRole,
+		Taints:        taints,
 	}
 
 	return data
@@ -252,4 +254,16 @@ func (h *NodeHandler) getNodeUsageFromCache(nodeName string) (cpuMillicore *int6
 	}
 
 	return cpuMillicore, memoryBytes
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *NodeHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.Node, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.Node) bool {
+		return true
+	}, logger, hasSynced)
 }

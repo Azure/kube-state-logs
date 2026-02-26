@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -126,10 +127,12 @@ func (h *HorizontalPodAutoscalerHandler) createLogEntry(hpa *autoscalingv2.Horiz
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "horizontalpodautoscaler",
-					Name:             utils.ExtractName(hpa),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(hpa),
+					Timestamp:         time.Now(),
+					ResourceType:      "horizontalpodautoscaler",
+					Name:              utils.ExtractName(hpa),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(hpa),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(hpa),
 				},
 				Namespace: utils.ExtractNamespace(hpa),
 			},
@@ -155,4 +158,16 @@ func (h *HorizontalPodAutoscalerHandler) createLogEntry(hpa *autoscalingv2.Horiz
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *HorizontalPodAutoscalerHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *autoscalingv2.HorizontalPodAutoscaler, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *autoscalingv2.HorizontalPodAutoscaler) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

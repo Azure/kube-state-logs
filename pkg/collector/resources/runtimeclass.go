@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	nodev1 "k8s.io/api/node/v1"
@@ -65,10 +66,12 @@ func (h *RuntimeClassHandler) createLogEntry(rc *nodev1.RuntimeClass) types.Runt
 	data := types.RuntimeClassData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "runtimeclass",
-				Name:             utils.ExtractName(rc),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(rc),
+				Timestamp:         time.Now(),
+				ResourceType:      "runtimeclass",
+				Name:              utils.ExtractName(rc),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(rc),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(rc),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(rc),
@@ -79,4 +82,16 @@ func (h *RuntimeClassHandler) createLogEntry(rc *nodev1.RuntimeClass) types.Runt
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *RuntimeClassHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *nodev1.RuntimeClass, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *nodev1.RuntimeClass) bool {
+		return true
+	}, logger, hasSynced)
 }

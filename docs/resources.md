@@ -168,3 +168,38 @@ For security, the `secret` resource only logs metadata (name, namespace, type, l
 ### Node Resource
 
 The `node` resource includes capacity, allocatable resources, conditions, and addresses. When Metrics Server is available, it also includes actual CPU/memory usage.
+
+## Event Logging
+
+By default kube-state-logs only emits periodic snapshots. When **event logging** is enabled, an immediate log entry is also produced whenever a resource is created or deleted.
+
+### Enabling Event Logging
+
+```yaml
+config:
+  enableEventLogging: true
+```
+
+Or via the CLI flag:
+
+```
+--enable-event-logging
+```
+
+### EventType Field
+
+Every log entry includes an `EventType` field:
+
+| Value        | Meaning                                      |
+|--------------|----------------------------------------------|
+| `snapshot`   | Periodic interval log (default behaviour)    |
+| `created`    | Emitted immediately on resource creation     |
+| `deleted`    | Emitted immediately on resource deletion     |
+
+### DeletionTimestamp
+
+All log entries include an optional `DeletionTimestamp` field (omitted when empty). For `deleted` events this is populated with the Kubernetes deletion timestamp of the object if available.
+
+### Sync Suppression
+
+Events are suppressed until the initial informer cache sync completes. This prevents a flood of `created` events when the application starts and first populates its cache.

@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -107,10 +108,12 @@ func (h *ReplicaSetHandler) createLogEntry(rs *appsv1.ReplicaSet) types.ReplicaS
 			NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 				NamespacedMetadata: types.NamespacedMetadata{
 					BaseMetadata: types.BaseMetadata{
-						Timestamp:        time.Now(),
-						ResourceType:     "replicaset",
-						Name:             utils.ExtractName(rs),
-						CreatedTimestamp: utils.ExtractCreationTimestamp(rs),
+						Timestamp:         time.Now(),
+						ResourceType:      "replicaset",
+						Name:              utils.ExtractName(rs),
+						CreatedTimestamp:  utils.ExtractCreationTimestamp(rs),
+						EventType:         "snapshot",
+						DeletionTimestamp: utils.ExtractDeletionTimestamp(rs),
 					},
 					Namespace: utils.ExtractNamespace(rs),
 				},
@@ -142,4 +145,16 @@ func (h *ReplicaSetHandler) createLogEntry(rs *appsv1.ReplicaSet) types.ReplicaS
 		// All other conditions (excluding the top-level ones)
 		Conditions: conditions,
 	}
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *ReplicaSetHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *appsv1.ReplicaSet, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *appsv1.ReplicaSet) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

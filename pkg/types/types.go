@@ -6,16 +6,16 @@ package types
 import (
 	"encoding/json"
 	"time"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // BaseMetadata contains the core metadata fields common to all resources
 type BaseMetadata struct {
-	Timestamp        time.Time `json:"Timestamp"`
-	ResourceType     string    `json:"ResourceType"`
-	Name             string    `json:"Name"`
-	CreatedTimestamp time.Time `json:"CreatedTimestamp"`
+	Timestamp         time.Time  `json:"Timestamp"`
+	ResourceType      string     `json:"ResourceType"`
+	Name              string     `json:"Name"`
+	CreatedTimestamp  time.Time  `json:"CreatedTimestamp"`
+	EventType         string     `json:"EventType"`
+	DeletionTimestamp *time.Time `json:"DeletionTimestamp,omitempty"`
 }
 
 // NamespacedMetadata extends BaseMetadata with namespace information for namespaced resources
@@ -118,7 +118,6 @@ type PodData struct {
 	RestartCount int32 `json:"RestartCount"`
 
 	// Missing from KSM
-	DeletionTimestamp      *time.Time        `json:"DeletionTimestamp"`
 	StartTime              *time.Time        `json:"StartTime"`
 	InitializedTime        *time.Time        `json:"InitializedTime"`
 	ReadyTime              *time.Time        `json:"ReadyTime"`
@@ -306,9 +305,8 @@ type NodeData struct {
 	Unschedulable *bool `json:"Unschedulable"`
 
 	// Missing from KSM
-	Role              string      `json:"Role"`
-	Taints            []TaintData `json:"Taints"`
-	DeletionTimestamp *time.Time  `json:"DeletionTimestamp"`
+	Role   string      `json:"Role"`
+	Taints []TaintData `json:"Taints"`
 
 	// All other conditions (excluding the top-level ones)
 	Conditions map[string]*bool `json:"Conditions"`
@@ -414,8 +412,7 @@ type NamespaceData struct {
 	Conditions map[string]*bool `json:"Conditions"`
 
 	// Namespace specific
-	DeletionTimestamp *metav1.Time `json:"DeletionTimestamp"`
-	Finalizers        []string     `json:"Finalizers"`
+	Finalizers []string `json:"Finalizers"`
 }
 
 // JobData represents job-specific metrics (matching kube-state-metrics)

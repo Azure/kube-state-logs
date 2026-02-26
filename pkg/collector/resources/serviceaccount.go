@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -89,10 +90,12 @@ func (h *ServiceAccountHandler) createLogEntry(sa *corev1.ServiceAccount) types.
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "serviceaccount",
-					Name:             utils.ExtractName(sa),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(sa),
+					Timestamp:         time.Now(),
+					ResourceType:      "serviceaccount",
+					Name:              utils.ExtractName(sa),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(sa),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(sa),
 				},
 				Namespace: utils.ExtractNamespace(sa),
 			},
@@ -117,4 +120,16 @@ func (h *ServiceAccountHandler) createLogEntry(sa *corev1.ServiceAccount) types.
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *ServiceAccountHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.ServiceAccount, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.ServiceAccount) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

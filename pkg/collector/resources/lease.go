@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	coordinationv1 "k8s.io/api/coordination/v1"
@@ -97,10 +98,12 @@ func (h *LeaseHandler) createLogEntry(lease *coordinationv1.Lease) types.LeaseDa
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "lease",
-					Name:             utils.ExtractName(lease),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(lease),
+					Timestamp:         time.Now(),
+					ResourceType:      "lease",
+					Name:              utils.ExtractName(lease),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(lease),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(lease),
 				},
 				Namespace: utils.ExtractNamespace(lease),
 			},
@@ -117,4 +120,16 @@ func (h *LeaseHandler) createLogEntry(lease *coordinationv1.Lease) types.LeaseDa
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *LeaseHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *coordinationv1.Lease, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *coordinationv1.Lease) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

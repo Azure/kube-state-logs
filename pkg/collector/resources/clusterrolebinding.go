@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -83,10 +84,12 @@ func (h *ClusterRoleBindingHandler) createLogEntry(binding *rbacv1.ClusterRoleBi
 	data := types.ClusterRoleBindingData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "clusterrolebinding",
-				Name:             utils.ExtractName(binding),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(binding),
+				Timestamp:         time.Now(),
+				ResourceType:      "clusterrolebinding",
+				Name:              utils.ExtractName(binding),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(binding),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(binding),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(binding),
@@ -98,4 +101,16 @@ func (h *ClusterRoleBindingHandler) createLogEntry(binding *rbacv1.ClusterRoleBi
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *ClusterRoleBindingHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *rbacv1.ClusterRoleBinding, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *rbacv1.ClusterRoleBinding) bool {
+		return true
+	}, logger, hasSynced)
 }

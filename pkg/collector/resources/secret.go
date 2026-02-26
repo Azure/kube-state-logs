@@ -6,6 +6,7 @@ package resources
 import (
 	"context"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -79,10 +80,12 @@ func (h *SecretHandler) createLogEntry(secret *corev1.Secret) types.SecretData {
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "secret",
-					Name:             utils.ExtractName(secret),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(secret),
+					Timestamp:         time.Now(),
+					ResourceType:      "secret",
+					Name:              utils.ExtractName(secret),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(secret),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(secret),
 				},
 				Namespace: utils.ExtractNamespace(secret),
 			},
@@ -96,4 +99,16 @@ func (h *SecretHandler) createLogEntry(secret *corev1.Secret) types.SecretData {
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *SecretHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.Secret, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.Secret) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

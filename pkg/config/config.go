@@ -35,6 +35,10 @@ type Config struct {
 	// ContainerEnvVars is the list of environment variable names to capture from containers.
 	// If empty, no environment variables will be collected.
 	ContainerEnvVars []string
+	// EnableEventLogging enables immediate log entries on resource creation and deletion.
+	// When enabled, informer event handlers emit a log entry the moment a resource is
+	// created or deleted, in addition to the periodic snapshots.
+	EnableEventLogging bool
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types

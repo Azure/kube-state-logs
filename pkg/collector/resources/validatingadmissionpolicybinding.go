@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -81,10 +82,12 @@ func (h *ValidatingAdmissionPolicyBindingHandler) createLogEntry(binding *admiss
 	data := types.ValidatingAdmissionPolicyBindingData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "validatingadmissionpolicybinding",
-				Name:             utils.ExtractName(binding),
-				CreatedTimestamp: createdTimestamp,
+				Timestamp:         time.Now(),
+				ResourceType:      "validatingadmissionpolicybinding",
+				Name:              utils.ExtractName(binding),
+				CreatedTimestamp:  createdTimestamp,
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(binding),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      binding.GetLabels(),
@@ -99,4 +102,16 @@ func (h *ValidatingAdmissionPolicyBindingHandler) createLogEntry(binding *admiss
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *ValidatingAdmissionPolicyBindingHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

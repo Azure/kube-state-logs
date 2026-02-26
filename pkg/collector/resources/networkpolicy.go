@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	networkingv1 "k8s.io/api/networking/v1"
@@ -105,10 +106,12 @@ func (h *NetworkPolicyHandler) createLogEntry(np *networkingv1.NetworkPolicy) ty
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "networkpolicy",
-					Name:             utils.ExtractName(np),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(np),
+					Timestamp:         time.Now(),
+					ResourceType:      "networkpolicy",
+					Name:              utils.ExtractName(np),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(np),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(np),
 				},
 				Namespace: utils.ExtractNamespace(np),
 			},
@@ -165,4 +168,16 @@ func (h *NetworkPolicyHandler) convertPeers(peers []networkingv1.NetworkPolicyPe
 		result = append(result, npPeer)
 	}
 	return result
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *NetworkPolicyHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *networkingv1.NetworkPolicy, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *networkingv1.NetworkPolicy) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

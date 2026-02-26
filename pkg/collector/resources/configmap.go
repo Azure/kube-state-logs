@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -76,10 +77,12 @@ func (h *ConfigMapHandler) createLogEntry(configmap *corev1.ConfigMap) types.Con
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "configmap",
-					Name:             utils.ExtractName(configmap),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(configmap),
+					Timestamp:         time.Now(),
+					ResourceType:      "configmap",
+					Name:              utils.ExtractName(configmap),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(configmap),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(configmap),
 				},
 				Namespace: utils.ExtractNamespace(configmap),
 			},
@@ -92,4 +95,16 @@ func (h *ConfigMapHandler) createLogEntry(configmap *corev1.ConfigMap) types.Con
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *ConfigMapHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.ConfigMap, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.ConfigMap) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

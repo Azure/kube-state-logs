@@ -6,12 +6,15 @@ package collector
 import (
 	"encoding/json"
 	"os"
+	"sync"
 
 	"github.com/azure/kube-state-logs/pkg/interfaces"
 )
 
-// LoggerImpl handles structured JSON logging
+// LoggerImpl handles structured JSON logging.
+// It is safe for concurrent use from multiple goroutines.
 type LoggerImpl struct {
+	mu      sync.Mutex
 	encoder *json.Encoder
 }
 
@@ -24,5 +27,7 @@ func NewLogger() interfaces.Logger {
 
 // Log writes a log entry as JSON to stdout
 func (l *LoggerImpl) Log(entry any) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.encoder.Encode(entry)
 }

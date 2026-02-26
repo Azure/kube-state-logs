@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -82,10 +83,12 @@ func (h *RoleHandler) createLogEntry(role *rbacv1.Role) types.RoleData {
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "role",
-					Name:             utils.ExtractName(role),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(role),
+					Timestamp:         time.Now(),
+					ResourceType:      "role",
+					Name:              utils.ExtractName(role),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(role),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(role),
 				},
 				Namespace: utils.ExtractNamespace(role),
 			},
@@ -98,4 +101,16 @@ func (h *RoleHandler) createLogEntry(role *rbacv1.Role) types.RoleData {
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *RoleHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *rbacv1.Role, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *rbacv1.Role) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

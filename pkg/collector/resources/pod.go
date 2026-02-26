@@ -6,6 +6,7 @@ package resources
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -119,10 +120,7 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 	}
 
 	// Get timestamps
-	var deletionTimestamp, startTime, initializedTime, readyTime, scheduledTime *time.Time
-	if pod.DeletionTimestamp != nil {
-		deletionTimestamp = &pod.DeletionTimestamp.Time
-	}
+	var startTime, initializedTime, readyTime, scheduledTime *time.Time
 	if pod.Status.StartTime != nil && !pod.Status.StartTime.IsZero() {
 		startTime = &pod.Status.StartTime.Time
 	}
@@ -279,10 +277,12 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 			NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 				NamespacedMetadata: types.NamespacedMetadata{
 					BaseMetadata: types.BaseMetadata{
-						Timestamp:        time.Now(),
-						ResourceType:     "pod",
-						Name:             utils.ExtractName(pod),
-						CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
+						Timestamp:         time.Now(),
+						ResourceType:      "pod",
+						Name:              utils.ExtractName(pod),
+						CreatedTimestamp:  utils.ExtractCreationTimestamp(pod),
+						EventType:         "snapshot",
+						DeletionTimestamp: utils.ExtractDeletionTimestamp(pod),
 					},
 					Namespace: utils.ExtractNamespace(pod),
 				},
@@ -310,7 +310,6 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		PodScheduled:              conditionScheduled,
 		Conditions:                conditions,
 		RestartCount:              totalRestartCount,
-		DeletionTimestamp:         deletionTimestamp,
 		StartTime:                 startTime,
 		InitializedTime:           initializedTime,
 		ReadyTime:                 readyTime,
@@ -410,4 +409,16 @@ func aggregateContainerResources(pod *corev1.Pod) containerResourceAggregation {
 	}
 
 	return result
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *PodHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.Pod, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.Pod) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

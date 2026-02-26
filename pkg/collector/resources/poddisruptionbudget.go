@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	policyv1 "k8s.io/api/policy/v1"
@@ -88,10 +89,12 @@ func (h *PodDisruptionBudgetHandler) createLogEntry(pdb *policyv1.PodDisruptionB
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "poddisruptionbudget",
-					Name:             utils.ExtractName(pdb),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(pdb),
+					Timestamp:         time.Now(),
+					ResourceType:      "poddisruptionbudget",
+					Name:              utils.ExtractName(pdb),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(pdb),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(pdb),
 				},
 				Namespace: utils.ExtractNamespace(pdb),
 			},
@@ -117,4 +120,16 @@ func (h *PodDisruptionBudgetHandler) createLogEntry(pdb *policyv1.PodDisruptionB
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *PodDisruptionBudgetHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *policyv1.PodDisruptionBudget, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *policyv1.PodDisruptionBudget) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

@@ -5,10 +5,10 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 
@@ -86,19 +86,15 @@ func (h *NamespaceHandler) createLogEntry(ns *corev1.Namespace) types.NamespaceD
 		}
 	}
 
-	var deletionTimestamp *v1.Time
-	if t := utils.ExtractDeletionTimestamp(ns); t != nil {
-		ts := v1.NewTime(*t)
-		deletionTimestamp = &ts
-	}
-
 	data := types.NamespaceData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "namespace",
-				Name:             utils.ExtractName(ns),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(ns),
+				Timestamp:         time.Now(),
+				ResourceType:      "namespace",
+				Name:              utils.ExtractName(ns),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(ns),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(ns),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(ns),
@@ -109,9 +105,20 @@ func (h *NamespaceHandler) createLogEntry(ns *corev1.Namespace) types.NamespaceD
 		ConditionActive:      conditionActive,
 		ConditionTerminating: conditionTerminating,
 		Conditions:           conditions,
-		DeletionTimestamp:    deletionTimestamp,
 		Finalizers:           ns.ObjectMeta.Finalizers,
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *NamespaceHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.Namespace, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.Namespace) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Name)
+	}, logger, hasSynced)
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -287,6 +288,29 @@ func (c *Collector) Run(ctx context.Context) error {
 		}
 	}
 
+	// Setup event handlers for immediate create/delete logging if enabled
+	var hasSynced atomic.Bool
+	if c.config.EnableEventLogging {
+		klog.Info("Event logging enabled, registering create/delete event handlers...")
+		for _, resourceType := range c.config.Resources {
+			if resourceType == "crd" {
+				continue
+			}
+			handler, exists := c.handlers[resourceType]
+			if !exists {
+				continue
+			}
+			if elh, ok := handler.(interfaces.EventLoggableHandler); ok {
+				elh.SetupEventHandlers(c.logger, c.config.Namespaces, &hasSynced)
+				klog.V(2).Infof("Registered event handlers for %s", resourceType)
+			}
+		}
+		for handlerKey, crdHandler := range c.crdHandlers {
+			crdHandler.SetupEventHandlers(c.logger, c.config.Namespaces, &hasSynced)
+			klog.V(2).Infof("Registered event handlers for CRD %s", handlerKey)
+		}
+	}
+
 	// Create a context-aware stop channel
 	go func() {
 		<-ctx.Done()
@@ -319,6 +343,13 @@ func (c *Collector) Run(ctx context.Context) error {
 	}
 
 	klog.Info("All informers synced successfully")
+
+	// Enable event-driven logging now that caches are synced.
+	// Events that fired during initial sync were suppressed.
+	if c.config.EnableEventLogging {
+		hasSynced.Store(true)
+		klog.Info("Event-driven create/delete logging is now active")
+	}
 
 	// Start individual tickers for each resource
 	c.startResourceTickers(ctx)
