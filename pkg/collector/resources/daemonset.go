@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -91,10 +92,12 @@ func (h *DaemonSetHandler) createLogEntry(ds *appsv1.DaemonSet) types.DaemonSetD
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "daemonset",
-					Name:             utils.ExtractName(ds),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(ds),
+					Timestamp:         time.Now(),
+					ResourceType:      "daemonset",
+					Name:              utils.ExtractName(ds),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(ds),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(ds),
 				},
 				Namespace: utils.ExtractNamespace(ds),
 			},
@@ -128,4 +131,16 @@ func (h *DaemonSetHandler) createLogEntry(ds *appsv1.DaemonSet) types.DaemonSetD
 		MetadataGeneration: ds.ObjectMeta.Generation,
 		CollisionCount:     ds.Status.CollisionCount,
 	}
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *DaemonSetHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *appsv1.DaemonSet, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *appsv1.DaemonSet) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

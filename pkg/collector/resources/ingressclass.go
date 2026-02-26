@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	networkingv1 "k8s.io/api/networking/v1"
@@ -71,10 +72,12 @@ func (h *IngressClassHandler) createLogEntry(ic *networkingv1.IngressClass) type
 	data := types.IngressClassData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "ingressclass",
-				Name:             utils.ExtractName(ic),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(ic),
+				Timestamp:         time.Now(),
+				ResourceType:      "ingressclass",
+				Name:              utils.ExtractName(ic),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(ic),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(ic),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(ic),
@@ -86,4 +89,16 @@ func (h *IngressClassHandler) createLogEntry(ic *networkingv1.IngressClass) type
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *IngressClassHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *networkingv1.IngressClass, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *networkingv1.IngressClass) bool {
+		return true
+	}, logger, hasSynced)
 }

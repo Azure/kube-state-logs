@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	certificatesv1 "k8s.io/api/certificates/v1"
@@ -76,10 +77,12 @@ func (h *CertificateSigningRequestHandler) createLogEntry(csr *certificatesv1.Ce
 	data := types.CertificateSigningRequestData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "certificatesigningrequest",
-				Name:             utils.ExtractName(csr),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(csr),
+				Timestamp:         time.Now(),
+				ResourceType:      "certificatesigningrequest",
+				Name:              utils.ExtractName(csr),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(csr),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(csr),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(csr),
@@ -93,4 +96,16 @@ func (h *CertificateSigningRequestHandler) createLogEntry(csr *certificatesv1.Ce
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *CertificateSigningRequestHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *certificatesv1.CertificateSigningRequest, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *certificatesv1.CertificateSigningRequest) bool {
+		return true
+	}, logger, hasSynced)
 }

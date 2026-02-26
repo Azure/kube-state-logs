@@ -208,10 +208,12 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 		return types.ContainerData{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     h.getResourceType(isInitContainer),
-					Name:             "",
-					CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
+					Timestamp:         time.Now(),
+					ResourceType:      h.getResourceType(isInitContainer),
+					Name:              "",
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(pod),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(pod),
 				},
 				Namespace: pod.Namespace,
 			},
@@ -342,10 +344,12 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 	data := types.ContainerData{
 		NamespacedMetadata: types.NamespacedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     h.getResourceType(isInitContainer),
-				Name:             container.Name,
-				CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
+				Timestamp:         time.Now(),
+				ResourceType:      h.getResourceType(isInitContainer),
+				Name:              container.Name,
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(pod),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(pod),
 			},
 			Namespace: pod.Namespace,
 		},

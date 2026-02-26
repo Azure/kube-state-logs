@@ -20,14 +20,15 @@ import (
 func main() {
 	// Parse command line flags
 	var (
-		logInterval      = flag.Duration("log-interval", 1*time.Minute, "Default interval between log outputs")
-		resources        = flag.String("resources", "pod,container,service,node,deployment,job,cronjob,configmap,secret,persistentvolumeclaim,ingress,horizontalpodautoscaler,serviceaccount,endpoints,persistentvolume,resourcequota,poddisruptionbudget,storageclass,networkpolicy,replicationcontroller,limitrange,lease,role,clusterrole,rolebinding,clusterrolebinding,volumeattachment,certificatesigningrequest,namespace,daemonset,statefulset,replicaset,mutatingwebhookconfiguration,validatingwebhookconfiguration,ingressclass,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding", "Comma-separated list of resources to monitor")
-		resourceConfigs  = flag.String("resource-configs", "", "Comma-separated list of resource:interval pairs (e.g., 'deployments:5m,pods:1m,services:2m'). If not specified, uses log-interval for all resources.")
-		crdConfigs       = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
-		namespaces       = flag.String("namespaces", "", "Comma-separated list of namespaces to monitor (empty for all)")
-		logLevel         = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
-		kubeconfig       = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
-		containerEnvVars = flag.String("container-envvars", "", "Comma-separated list of environment variable names to capture from containers (e.g., 'GOMAXPROCS,MY_FLAG'). Empty disables capturing.")
+		logInterval        = flag.Duration("log-interval", 1*time.Minute, "Default interval between log outputs")
+		resources          = flag.String("resources", "pod,container,service,node,deployment,job,cronjob,configmap,secret,persistentvolumeclaim,ingress,horizontalpodautoscaler,serviceaccount,endpoints,persistentvolume,resourcequota,poddisruptionbudget,storageclass,networkpolicy,replicationcontroller,limitrange,lease,role,clusterrole,rolebinding,clusterrolebinding,volumeattachment,certificatesigningrequest,namespace,daemonset,statefulset,replicaset,mutatingwebhookconfiguration,validatingwebhookconfiguration,ingressclass,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding", "Comma-separated list of resources to monitor")
+		resourceConfigs    = flag.String("resource-configs", "", "Comma-separated list of resource:interval pairs (e.g., 'deployments:5m,pods:1m,services:2m'). If not specified, uses log-interval for all resources.")
+		crdConfigs         = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
+		namespaces         = flag.String("namespaces", "", "Comma-separated list of namespaces to monitor (empty for all)")
+		logLevel           = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+		kubeconfig         = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
+		containerEnvVars   = flag.String("container-envvars", "", "Comma-separated list of environment variable names to capture from containers (e.g., 'GOMAXPROCS,MY_FLAG'). Empty disables capturing.")
+		enableEventLogging = flag.Bool("enable-event-logging", false, "Enable immediate log entries on resource creation and deletion")
 	)
 	flag.Parse()
 
@@ -54,13 +55,14 @@ func main() {
 
 	// Create configuration
 	cfg := &config.Config{
-		LogInterval:      *logInterval,
-		Resources:        config.ParseResourceList(*resources),
-		ResourceConfigs:  resourceConfigsList,
-		CRDs:             config.ParseCRDConfigs(*crdConfigs),
-		Namespaces:       config.ParseNamespaceList(*namespaces),
-		Kubeconfig:       *kubeconfig,
-		ContainerEnvVars: config.ParseContainerEnvVars(*containerEnvVars),
+		LogInterval:        *logInterval,
+		Resources:          config.ParseResourceList(*resources),
+		ResourceConfigs:    resourceConfigsList,
+		CRDs:               config.ParseCRDConfigs(*crdConfigs),
+		Namespaces:         config.ParseNamespaceList(*namespaces),
+		Kubeconfig:         *kubeconfig,
+		ContainerEnvVars:   config.ParseContainerEnvVars(*containerEnvVars),
+		EnableEventLogging: *enableEventLogging,
 	}
 
 	// Validate configuration to prevent runtime issues

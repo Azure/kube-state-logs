@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -101,10 +102,12 @@ func (h *StatefulSetHandler) createLogEntry(sts *appsv1.StatefulSet) types.State
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "statefulset",
-					Name:             utils.ExtractName(sts),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(sts),
+					Timestamp:         time.Now(),
+					ResourceType:      "statefulset",
+					Name:              utils.ExtractName(sts),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(sts),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(sts),
 				},
 				Namespace: utils.ExtractNamespace(sts),
 			},
@@ -130,4 +133,16 @@ func (h *StatefulSetHandler) createLogEntry(sts *appsv1.StatefulSet) types.State
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *StatefulSetHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *appsv1.StatefulSet, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *appsv1.StatefulSet) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

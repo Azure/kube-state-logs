@@ -40,6 +40,7 @@ config:
   logInterval: "1m"           # How often to log resource state
   logLevel: "info"            # debug, info, warn, error
   namespaces: ""              # Empty = all namespaces
+  enableEventLogging: false   # Emit immediate logs on resource creation/deletion
   resources:                  # Which resources to monitor
     - pod
     - deployment
@@ -65,6 +66,16 @@ We welcome contributions to add support for other log collection solutions (e.g.
 
 kube-state-logs watches Kubernetes resources and logs their current state as JSON at the configured interval. Each resource type gets one log line per object, per interval.
 
+### Event Logging
+
+When `enableEventLogging` is set to `true`, kube-state-logs also emits an immediate log entry whenever a resource is created or deleted, without waiting for the next periodic interval. Each log entry includes an `EventType` field:
+
+- `"snapshot"` — periodic interval log (the default behaviour)
+- `"created"` — emitted immediately when a resource is first seen
+- `"deleted"` — emitted immediately when a resource is removed; includes a `DeletionTimestamp` field
+
+Events during the initial informer cache sync are suppressed to avoid flooding logs on startup.
+
 ## Example Output
 
 A deployment logged as JSON (truncated for brevity):
@@ -73,6 +84,7 @@ A deployment logged as JSON (truncated for brevity):
 {
   "Timestamp": "2024-01-15T10:30:00Z",
   "ResourceType": "deployment",
+  "EventType": "snapshot",
   "Name": "my-app",
   "Namespace": "default",
   "CreatedTimestamp": "2024-01-10T08:00:00Z",

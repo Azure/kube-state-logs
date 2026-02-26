@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -126,10 +127,12 @@ func (h *ValidatingWebhookConfigurationHandler) createLogEntry(webhook *admissio
 	data := types.ValidatingWebhookConfigurationData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "validatingwebhookconfiguration",
-				Name:             utils.ExtractName(webhook),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(webhook),
+				Timestamp:         time.Now(),
+				ResourceType:      "validatingwebhookconfiguration",
+				Name:              utils.ExtractName(webhook),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(webhook),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(webhook),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(webhook),
@@ -145,4 +148,16 @@ func (h *ValidatingWebhookConfigurationHandler) createLogEntry(webhook *admissio
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *ValidatingWebhookConfigurationHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *admissionregistrationv1.ValidatingWebhookConfiguration, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *admissionregistrationv1.ValidatingWebhookConfiguration) bool {
+		return true
+	}, logger, hasSynced)
 }

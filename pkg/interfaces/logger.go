@@ -5,6 +5,7 @@ package interfaces
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/client-go/informers"
@@ -19,4 +20,12 @@ type Logger interface {
 type ResourceHandler interface {
 	SetupInformer(factory informers.SharedInformerFactory, logger Logger, resyncPeriod time.Duration) error
 	Collect(ctx context.Context, namespaces []string) ([]any, error)
+}
+
+// EventLoggableHandler is an optional interface that resource handlers can
+// implement to support immediate event-driven logging on resource creation
+// and deletion. Handlers that implement this interface will have their
+// SetupEventHandlers method called when event logging is enabled.
+type EventLoggableHandler interface {
+	SetupEventHandlers(logger Logger, namespaces []string, hasSynced *atomic.Bool)
 }

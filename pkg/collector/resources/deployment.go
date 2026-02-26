@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -141,10 +142,12 @@ func (h *DeploymentHandler) createLogEntry(deployment *appsv1.Deployment) types.
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "deployment",
-					Name:             utils.ExtractName(deployment),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(deployment),
+					Timestamp:         time.Now(),
+					ResourceType:      "deployment",
+					Name:              utils.ExtractName(deployment),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(deployment),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(deployment),
 				},
 				Namespace: utils.ExtractNamespace(deployment),
 			},
@@ -187,4 +190,16 @@ func (h *DeploymentHandler) createLogEntry(deployment *appsv1.Deployment) types.
 		// Metadata
 		MetadataGeneration: utils.ExtractGeneration(deployment),
 	}
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *DeploymentHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *appsv1.Deployment, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *appsv1.Deployment) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

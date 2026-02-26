@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -93,10 +94,12 @@ func (h *CronJobHandler) createLogEntry(cronjob *batchv1.CronJob) types.CronJobD
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "cronjob",
-					Name:             utils.ExtractName(cronjob),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(cronjob),
+					Timestamp:         time.Now(),
+					ResourceType:      "cronjob",
+					Name:              utils.ExtractName(cronjob),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(cronjob),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(cronjob),
 				},
 				Namespace: utils.ExtractNamespace(cronjob),
 			},
@@ -117,4 +120,16 @@ func (h *CronJobHandler) createLogEntry(cronjob *batchv1.CronJob) types.CronJobD
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *CronJobHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *batchv1.CronJob, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *batchv1.CronJob) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

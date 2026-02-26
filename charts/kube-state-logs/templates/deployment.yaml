@@ -73,6 +73,9 @@ spec:
             {{- if .Values.config.containerEnvVars }}
             - --container-envvars={{ .Values.config.containerEnvVars | join "," }}
             {{- end }}
+            {{- if .Values.config.enableEventLogging }}
+            - --enable-event-logging
+            {{- end }}
           resources:
             limits:
               cpu: {{ .Values.resources.limits.cpu }}

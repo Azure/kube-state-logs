@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -107,10 +108,12 @@ func (h *EndpointsHandler) createLogEntry(endpoints *corev1.Endpoints) types.End
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "endpoints",
-					Name:             utils.ExtractName(endpoints),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(endpoints),
+					Timestamp:         time.Now(),
+					ResourceType:      "endpoints",
+					Name:              utils.ExtractName(endpoints),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(endpoints),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(endpoints),
 				},
 				Namespace: utils.ExtractNamespace(endpoints),
 			},
@@ -135,4 +138,16 @@ func (h *EndpointsHandler) createLogEntry(endpoints *corev1.Endpoints) types.End
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *EndpointsHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.Endpoints, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.Endpoints) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

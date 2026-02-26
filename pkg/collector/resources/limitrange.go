@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -109,10 +110,12 @@ func (h *LimitRangeHandler) createLogEntry(lr *corev1.LimitRange) types.LimitRan
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "limitrange",
-					Name:             utils.ExtractName(lr),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(lr),
+					Timestamp:         time.Now(),
+					ResourceType:      "limitrange",
+					Name:              utils.ExtractName(lr),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(lr),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(lr),
 				},
 				Namespace: utils.ExtractNamespace(lr),
 			},
@@ -130,4 +133,16 @@ func (h *LimitRangeHandler) createLogEntry(lr *corev1.LimitRange) types.LimitRan
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *LimitRangeHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.LimitRange, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.LimitRange) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

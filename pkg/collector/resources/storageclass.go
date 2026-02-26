@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	storagev1 "k8s.io/api/storage/v1"
@@ -115,10 +116,12 @@ func (h *StorageClassHandler) createLogEntry(sc *storagev1.StorageClass) types.S
 	data := types.StorageClassData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "storageclass",
-				Name:             utils.ExtractName(sc),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(sc),
+				Timestamp:         time.Now(),
+				ResourceType:      "storageclass",
+				Name:              utils.ExtractName(sc),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(sc),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(sc),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(sc),
@@ -136,4 +139,16 @@ func (h *StorageClassHandler) createLogEntry(sc *storagev1.StorageClass) types.S
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *StorageClassHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *storagev1.StorageClass, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *storagev1.StorageClass) bool {
+		return true
+	}, logger, hasSynced)
 }

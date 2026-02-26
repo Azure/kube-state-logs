@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -144,10 +145,12 @@ func (h *PersistentVolumeHandler) createLogEntry(pv *corev1.PersistentVolume) ty
 	data := types.PersistentVolumeData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "persistentvolume",
-				Name:             utils.ExtractName(pv),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(pv),
+				Timestamp:         time.Now(),
+				ResourceType:      "persistentvolume",
+				Name:              utils.ExtractName(pv),
+				CreatedTimestamp:  utils.ExtractCreationTimestamp(pv),
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(pv),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(pv),
@@ -166,4 +169,16 @@ func (h *PersistentVolumeHandler) createLogEntry(pv *corev1.PersistentVolume) ty
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *PersistentVolumeHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.PersistentVolume, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.PersistentVolume) bool {
+		return true
+	}, logger, hasSynced)
 }

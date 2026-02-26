@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	schedulingv1 "k8s.io/api/scheduling/v1"
@@ -70,10 +71,12 @@ func (h *PriorityClassHandler) createLogEntry(pc *schedulingv1.PriorityClass) ty
 	data := types.PriorityClassData{
 		ClusterScopedMetadata: types.ClusterScopedMetadata{
 			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "priorityclass",
-				Name:             utils.ExtractName(pc),
-				CreatedTimestamp: createdTimestamp,
+				Timestamp:         time.Now(),
+				ResourceType:      "priorityclass",
+				Name:              utils.ExtractName(pc),
+				CreatedTimestamp:  createdTimestamp,
+				EventType:         "snapshot",
+				DeletionTimestamp: utils.ExtractDeletionTimestamp(pc),
 			},
 			LabeledMetadata: types.LabeledMetadata{
 				Labels:      utils.ExtractLabels(pc),
@@ -87,4 +90,16 @@ func (h *PriorityClassHandler) createLogEntry(pc *schedulingv1.PriorityClass) ty
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *PriorityClassHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *schedulingv1.PriorityClass, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *schedulingv1.PriorityClass) bool {
+		return true
+	}, logger, hasSynced)
 }

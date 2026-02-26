@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -79,10 +80,12 @@ func (h *ResourceQuotaHandler) createLogEntry(quota *corev1.ResourceQuota) types
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "resourcequota",
-					Name:             utils.ExtractName(quota),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(quota),
+					Timestamp:         time.Now(),
+					ResourceType:      "resourcequota",
+					Name:              utils.ExtractName(quota),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(quota),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(quota),
 				},
 				Namespace: utils.ExtractNamespace(quota),
 			},
@@ -106,4 +109,16 @@ func resourceListToInt64Map(rl corev1.ResourceList) map[string]int64 {
 		result[string(resourceName)] = quantity.Value()
 	}
 	return result
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *ResourceQuotaHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *corev1.ResourceQuota, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *corev1.ResourceQuota) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

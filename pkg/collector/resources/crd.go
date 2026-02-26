@@ -6,6 +6,7 @@ package resources
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -90,10 +91,12 @@ func (h *CRDHandler) createLogEntry(obj *unstructured.Unstructured) types.CRDDat
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     strings.ToLower(obj.GetKind()), // Use lowercase Kind as ResourceType
-					Name:             utils.ExtractName(obj),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(obj),
+					Timestamp:         time.Now(),
+					ResourceType:      strings.ToLower(obj.GetKind()), // Use lowercase Kind as ResourceType
+					Name:              utils.ExtractName(obj),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(obj),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(obj),
 				},
 				Namespace: utils.ExtractNamespace(obj),
 			},
@@ -112,4 +115,16 @@ func (h *CRDHandler) createLogEntry(obj *unstructured.Unstructured) types.CRDDat
 // extractField extracts a field from an object using a dot-separated path
 func (h *CRDHandler) extractField(obj map[string]any, path string) any {
 	return utils.ExtractField(obj, path)
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on CRD resource creation and deletion.
+func (h *CRDHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.informer, func(obj *unstructured.Unstructured, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *unstructured.Unstructured) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.GetNamespace())
+	}, logger, hasSynced)
 }

@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -88,10 +89,12 @@ func (h *RoleBindingHandler) createLogEntry(rb *rbacv1.RoleBinding) types.RoleBi
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "rolebinding",
-					Name:             utils.ExtractName(rb),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(rb),
+					Timestamp:         time.Now(),
+					ResourceType:      "rolebinding",
+					Name:              utils.ExtractName(rb),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(rb),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(rb),
 				},
 				Namespace: utils.ExtractNamespace(rb),
 			},
@@ -105,4 +108,16 @@ func (h *RoleBindingHandler) createLogEntry(rb *rbacv1.RoleBinding) types.RoleBi
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *RoleBindingHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *rbacv1.RoleBinding, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *rbacv1.RoleBinding) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -113,10 +114,12 @@ func (h *JobHandler) createLogEntry(job *batchv1.Job) types.JobData {
 			NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 				NamespacedMetadata: types.NamespacedMetadata{
 					BaseMetadata: types.BaseMetadata{
-						Timestamp:        time.Now(),
-						ResourceType:     "job",
-						Name:             utils.ExtractName(job),
-						CreatedTimestamp: utils.ExtractCreationTimestamp(job),
+						Timestamp:         time.Now(),
+						ResourceType:      "job",
+						Name:              utils.ExtractName(job),
+						CreatedTimestamp:  utils.ExtractCreationTimestamp(job),
+						EventType:         "snapshot",
+						DeletionTimestamp: utils.ExtractDeletionTimestamp(job),
 					},
 					Namespace: utils.ExtractNamespace(job),
 				},
@@ -145,4 +148,16 @@ func (h *JobHandler) createLogEntry(job *batchv1.Job) types.JobData {
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *JobHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *batchv1.Job, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *batchv1.Job) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }

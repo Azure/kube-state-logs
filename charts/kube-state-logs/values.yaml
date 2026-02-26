@@ -38,6 +38,11 @@ config:
   containerEnvVars:
     - "GOMAXPROCS"
 
+  # Enable immediate log entries on resource creation and deletion.
+  # When enabled, a log entry is emitted the moment a resource is created
+  # or deleted, in addition to periodic snapshot logs.
+  enableEventLogging: false
+
 # Resource limits
 resources:
   limits:

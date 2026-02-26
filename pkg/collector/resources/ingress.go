@@ -6,6 +6,7 @@ package resources
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	networkingv1 "k8s.io/api/networking/v1"
@@ -134,10 +135,12 @@ func (h *IngressHandler) createLogEntry(ingress *networkingv1.Ingress) types.Ing
 		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
 			NamespacedMetadata: types.NamespacedMetadata{
 				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "ingress",
-					Name:             utils.ExtractName(ingress),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(ingress),
+					Timestamp:         time.Now(),
+					ResourceType:      "ingress",
+					Name:              utils.ExtractName(ingress),
+					CreatedTimestamp:  utils.ExtractCreationTimestamp(ingress),
+					EventType:         "snapshot",
+					DeletionTimestamp: utils.ExtractDeletionTimestamp(ingress),
 				},
 				Namespace: utils.ExtractNamespace(ingress),
 			},
@@ -166,4 +169,16 @@ func (h *IngressHandler) createLogEntry(ingress *networkingv1.Ingress) types.Ing
 	}
 
 	return data
+}
+
+// SetupEventHandlers registers informer event handlers for immediate
+// logging on resource creation and deletion.
+func (h *IngressHandler) SetupEventHandlers(logger interfaces.Logger, namespaces []string, hasSynced *atomic.Bool) {
+	utils.SetupEventHandlers(h.GetInformer(), func(obj *networkingv1.Ingress, eventType string) any {
+		entry := h.createLogEntry(obj)
+		entry.EventType = eventType
+		return entry
+	}, func(obj *networkingv1.Ingress) bool {
+		return utils.ShouldIncludeNamespace(namespaces, obj.Namespace)
+	}, logger, hasSynced)
 }
