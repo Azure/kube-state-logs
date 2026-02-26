@@ -54,6 +54,10 @@ func (h *ReplicationControllerHandler) Collect(ctx context.Context, namespaces [
 			continue
 		}
 
+		if !h.MatchesSelectors(replicationcontroller) {
+			continue
+		}
+
 		entry := h.createLogEntry(replicationcontroller)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

@@ -50,6 +50,10 @@ func (h *RuntimeClassHandler) Collect(ctx context.Context, namespaces []string) 
 			continue
 		}
 
+		if !h.MatchesSelectors(runtimeclass) {
+			continue
+		}
+
 		entry := h.createLogEntry(runtimeclass)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

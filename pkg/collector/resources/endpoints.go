@@ -54,6 +54,10 @@ func (h *EndpointsHandler) Collect(ctx context.Context, namespaces []string) ([]
 			continue
 		}
 
+		if !h.MatchesSelectors(endpoint) {
+			continue
+		}
+
 		entry := h.createLogEntry(endpoint)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

@@ -50,6 +50,10 @@ func (h *ClusterRoleBindingHandler) Collect(ctx context.Context, namespaces []st
 			continue
 		}
 
+		if !h.MatchesSelectors(clusterrolebinding) {
+			continue
+		}
+
 		entry := h.createLogEntry(clusterrolebinding)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

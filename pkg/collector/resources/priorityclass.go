@@ -50,6 +50,10 @@ func (h *PriorityClassHandler) Collect(ctx context.Context, namespaces []string)
 			continue
 		}
 
+		if !h.MatchesSelectors(priorityclass) {
+			continue
+		}
+
 		entry := h.createLogEntry(priorityclass)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

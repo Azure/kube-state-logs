@@ -54,6 +54,10 @@ func (h *StatefulSetHandler) Collect(ctx context.Context, namespaces []string) (
 			continue
 		}
 
+		if !h.MatchesSelectors(statefulset) {
+			continue
+		}
+
 		entry := h.createLogEntry(statefulset)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

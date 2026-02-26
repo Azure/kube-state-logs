@@ -50,6 +50,10 @@ func (h *VolumeAttachmentHandler) Collect(ctx context.Context, namespaces []stri
 			continue
 		}
 
+		if !h.MatchesSelectors(volumeattachment) {
+			continue
+		}
+
 		entry := h.createLogEntry(volumeattachment)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

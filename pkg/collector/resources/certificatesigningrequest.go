@@ -50,6 +50,10 @@ func (h *CertificateSigningRequestHandler) Collect(ctx context.Context, namespac
 			continue
 		}
 
+		if !h.MatchesSelectors(csr) {
+			continue
+		}
+
 		entry := h.createLogEntry(csr)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

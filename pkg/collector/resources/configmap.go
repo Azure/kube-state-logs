@@ -54,6 +54,10 @@ func (h *ConfigMapHandler) Collect(ctx context.Context, namespaces []string) ([]
 			continue
 		}
 
+		if !h.MatchesSelectors(configmap) {
+			continue
+		}
+
 		entry := h.createLogEntry(configmap)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

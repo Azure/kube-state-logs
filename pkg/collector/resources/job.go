@@ -54,6 +54,10 @@ func (h *JobHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 			continue
 		}
 
+		if !h.MatchesSelectors(job) {
+			continue
+		}
+
 		entry := h.createLogEntry(job)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

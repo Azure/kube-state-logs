@@ -54,6 +54,10 @@ func (h *RoleHandler) Collect(ctx context.Context, namespaces []string) ([]any, 
 			continue
 		}
 
+		if !h.MatchesSelectors(role) {
+			continue
+		}
+
 		entry := h.createLogEntry(role)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

@@ -55,6 +55,10 @@ func (h *NamespaceHandler) Collect(ctx context.Context, namespaces []string) ([]
 			continue
 		}
 
+		if !h.MatchesSelectors(namespace) {
+			continue
+		}
+
 		entry := h.createLogEntry(namespace)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

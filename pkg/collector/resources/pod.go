@@ -65,6 +65,10 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 			continue
 		}
 
+		if !h.MatchesSelectors(pod) {
+			continue
+		}
+
 		entry := h.createLogEntry(pod)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

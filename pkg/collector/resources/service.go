@@ -61,6 +61,10 @@ func (h *ServiceHandler) Collect(ctx context.Context, namespaces []string) ([]an
 			continue
 		}
 
+		if !h.MatchesSelectors(service) {
+			continue
+		}
+
 		entry := h.createLogEntry(service)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

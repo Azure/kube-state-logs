@@ -54,6 +54,10 @@ func (h *PodDisruptionBudgetHandler) Collect(ctx context.Context, namespaces []s
 			continue
 		}
 
+		if !h.MatchesSelectors(pdb) {
+			continue
+		}
+
 		entry := h.createLogEntry(pdb)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

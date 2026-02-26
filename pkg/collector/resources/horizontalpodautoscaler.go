@@ -54,6 +54,10 @@ func (h *HorizontalPodAutoscalerHandler) Collect(ctx context.Context, namespaces
 			continue
 		}
 
+		if !h.MatchesSelectors(hpa) {
+			continue
+		}
+
 		entry := h.createLogEntry(hpa)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

@@ -54,6 +54,10 @@ func (h *LimitRangeHandler) Collect(ctx context.Context, namespaces []string) ([
 			continue
 		}
 
+		if !h.MatchesSelectors(limitrange) {
+			continue
+		}
+
 		entry := h.createLogEntry(limitrange)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

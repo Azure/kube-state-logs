@@ -55,6 +55,10 @@ func (h *DeploymentHandler) Collect(ctx context.Context, namespaces []string) ([
 			continue
 		}
 
+		if !h.MatchesSelectors(deployment) {
+			continue
+		}
+
 		entry := h.createLogEntry(deployment)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

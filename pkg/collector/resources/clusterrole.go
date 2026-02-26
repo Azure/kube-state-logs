@@ -50,6 +50,10 @@ func (h *ClusterRoleHandler) Collect(ctx context.Context, namespaces []string) (
 			continue
 		}
 
+		if !h.MatchesSelectors(clusterrole) {
+			continue
+		}
+
 		entry := h.createLogEntry(clusterrole)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

@@ -54,6 +54,10 @@ func (h *ReplicaSetHandler) Collect(ctx context.Context, namespaces []string) ([
 			continue
 		}
 
+		if !h.MatchesSelectors(replicaset) {
+			continue
+		}
+
 		// Skip replicasets with 0 desired replicas to avoid showing historical revisions
 		if replicaset.Spec.Replicas != nil {
 			if *replicaset.Spec.Replicas <= 0 {

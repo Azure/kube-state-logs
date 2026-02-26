@@ -50,6 +50,10 @@ func (h *StorageClassHandler) Collect(ctx context.Context, namespaces []string) 
 			continue
 		}
 
+		if !h.MatchesSelectors(storageclass) {
+			continue
+		}
+
 		entry := h.createLogEntry(storageclass)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)
