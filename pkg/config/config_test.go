@@ -154,3 +154,186 @@ func TestParseContainerEnvVars(t *testing.T) {
 		}
 	}
 }
+
+func TestParseResourceConfigs(t *testing.T) {
+	defaultInterval := 5 * time.Minute
+	tests := []struct {
+		name        string
+		input       string
+		expectErr   bool
+		expectCount int
+		expectItems []struct {
+			name     string
+			interval time.Duration
+			labels   string
+			fields   string
+		}
+	}{
+		{
+			name:        "empty input",
+			input:       "",
+			expectErr:   false,
+			expectCount: 0,
+			expectItems: nil,
+		},
+		{
+			name:        "labels and fields with escaped comma",
+			input:       `configmap:1m:labels=app=foo\,env=prod:fields=metadata.name=my-cm`,
+			expectErr:   false,
+			expectCount: 1,
+			expectItems: []struct {
+				name     string
+				interval time.Duration
+				labels   string
+				fields   string
+			}{
+				{
+					name:     "configmap",
+					interval: time.Minute,
+					labels:   "app=foo,env=prod",
+					fields:   "metadata.name=my-cm",
+				},
+			},
+		},
+		{
+			name:        "labels only without interval",
+			input:       `configmap:labels=app=foo`,
+			expectErr:   false,
+			expectCount: 1,
+			expectItems: []struct {
+				name     string
+				interval time.Duration
+				labels   string
+				fields   string
+			}{
+				{
+					name:     "configmap",
+					interval: defaultInterval,
+					labels:   "app=foo",
+					fields:   "",
+				},
+			},
+		},
+		{
+			name:        "label selector with in operator",
+			input:       `configmap:1m:labels=environment in (frontend\,backend)`,
+			expectErr:   false,
+			expectCount: 1,
+			expectItems: []struct {
+				name     string
+				interval time.Duration
+				labels   string
+				fields   string
+			}{
+				{
+					name:     "configmap",
+					interval: time.Minute,
+					labels:   "environment in (backend,frontend)",
+					fields:   "",
+				},
+			},
+		},
+		{
+			name:        "label selector with notin operator",
+			input:       `configmap:1m:labels=environment notin (frontend\,backend)`,
+			expectErr:   false,
+			expectCount: 1,
+			expectItems: []struct {
+				name     string
+				interval time.Duration
+				labels   string
+				fields   string
+			}{
+				{
+					name:     "configmap",
+					interval: time.Minute,
+					labels:   "environment notin (backend,frontend)",
+					fields:   "",
+				},
+			},
+		},
+		{
+			name:        "two resources",
+			input:       `configmap:1m:labels=app=foo\,env=prod,pod:30s:fields=metadata.name=my-pod`,
+			expectErr:   false,
+			expectCount: 2,
+			expectItems: []struct {
+				name     string
+				interval time.Duration
+				labels   string
+				fields   string
+			}{
+				{
+					name:     "configmap",
+					interval: time.Minute,
+					labels:   "app=foo,env=prod",
+					fields:   "",
+				},
+				{
+					name:     "pod",
+					interval: 30 * time.Second,
+					labels:   "",
+					fields:   "metadata.name=my-pod",
+				},
+			},
+		},
+		{
+			name:      "invalid interval",
+			input:     "configmap:notaduration",
+			expectErr: true,
+		},
+		{
+			name:      "unterminated escape",
+			input:     "configmap:1m:labels=app=foo\\",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configs, err := ParseResourceConfigs(tt.input, defaultInterval)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(configs) != tt.expectCount {
+				t.Fatalf("expected %d configs, got %d", tt.expectCount, len(configs))
+			}
+
+			if tt.expectCount == 0 {
+				return
+			}
+
+			if len(tt.expectItems) == 0 {
+				return
+			}
+
+			if len(tt.expectItems) != len(configs) {
+				t.Fatalf("expected %d config items, got %d", len(tt.expectItems), len(configs))
+			}
+
+			for i, expected := range tt.expectItems {
+				rc := configs[i]
+				if rc.Name != expected.name {
+					t.Errorf("expected name %q, got %q", expected.name, rc.Name)
+				}
+				if rc.Interval != expected.interval {
+					t.Errorf("expected interval %v, got %v", expected.interval, rc.Interval)
+				}
+				if expected.labels != "" && rc.LabelSelector.String() != expected.labels {
+					t.Errorf("expected labels %q, got %q", expected.labels, rc.LabelSelector.String())
+				}
+				if expected.fields != "" && rc.FieldSelector.String() != expected.fields {
+					t.Errorf("expected fields %q, got %q", expected.fields, rc.FieldSelector.String())
+				}
+			}
+		})
+	}
+}
