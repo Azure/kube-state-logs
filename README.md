@@ -37,10 +37,11 @@ Configure via Helm values:
 
 ```yaml
 config:
-  logInterval: "1m"           # How often to log resource state
-  logLevel: "info"            # debug, info, warn, error
-  namespaces: ""              # Empty = all namespaces
-  resources:                  # Which resources to monitor
+  logInterval: "1m"             # How often to log resource state
+  logLevel: "info"              # debug, info, warn, error
+  namespaces: ""                # Empty = all namespaces
+  configmapIncludeValues: false # ConfigMap data values
+  resources:                    # Which resources to monitor
     - pod
     - deployment
     - node

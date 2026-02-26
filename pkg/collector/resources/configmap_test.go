@@ -51,7 +51,7 @@ func createTestConfigMap(name, namespace string) *corev1.ConfigMap {
 
 func TestNewConfigMapHandler(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	handler := NewConfigMapHandler(client)
+	handler := NewConfigMapHandler(client, false)
 
 	if handler == nil {
 		t.Fatal("Expected handler to be created, got nil")
@@ -65,7 +65,7 @@ func TestNewConfigMapHandler(t *testing.T) {
 
 func TestConfigMapHandler_SetupInformer(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	handler := NewConfigMapHandler(client)
+	handler := NewConfigMapHandler(client, false)
 	factory := informers.NewSharedInformerFactory(client, time.Hour)
 	logger := &testutils.MockLogger{}
 
@@ -87,7 +87,7 @@ func TestConfigMapHandler_Collect(t *testing.T) {
 
 	// Create fake client with test configmaps
 	client := fake.NewSimpleClientset(configMap1, configMap2)
-	handler := NewConfigMapHandler(client)
+	handler := NewConfigMapHandler(client, false)
 	factory := informers.NewSharedInformerFactory(client, time.Hour)
 	logger := &testutils.MockLogger{}
 
@@ -135,7 +135,7 @@ func TestConfigMapHandler_Collect(t *testing.T) {
 
 func TestConfigMapHandler_createLogEntry(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	handler := NewConfigMapHandler(client)
+	handler := NewConfigMapHandler(client, false)
 	configMap := createTestConfigMap("test-config", "default")
 	entry := handler.createLogEntry(configMap)
 
@@ -154,6 +154,9 @@ func TestConfigMapHandler_createLogEntry(t *testing.T) {
 	// Verify configmap-specific fields
 	if len(entry.DataKeys) != 4 {
 		t.Errorf("Expected 4 data keys, got %d", len(entry.DataKeys))
+	}
+	if entry.Data != nil {
+		t.Errorf("Expected data values to be omitted, got %v", entry.Data)
 	}
 
 	// Check that all expected keys are present
@@ -180,9 +183,28 @@ func TestConfigMapHandler_createLogEntry(t *testing.T) {
 	}
 }
 
+func TestConfigMapHandler_createLogEntry_WithValues(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	handler := NewConfigMapHandler(client, true)
+	configMap := createTestConfigMap("test-config", "default")
+	entry := handler.createLogEntry(configMap)
+
+	if entry.Data == nil {
+		t.Fatal("Expected data values to be included, got nil")
+	}
+
+	if entry.Data["config.yaml"] != configMap.Data["config.yaml"] {
+		t.Errorf("Expected value for config.yaml, got '%s'", entry.Data["config.yaml"])
+	}
+
+	if _, exists := entry.Data["binary.dat"]; exists {
+		t.Errorf("Did not expect binary data to be included")
+	}
+}
+
 func TestConfigMapHandler_createLogEntry_WithOwnerReference(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	handler := NewConfigMapHandler(client)
+	handler := NewConfigMapHandler(client, false)
 	configMap := createTestConfigMap("test-config", "default")
 	configMap.OwnerReferences = []metav1.OwnerReference{
 		{
@@ -212,7 +234,7 @@ func TestConfigMapHandler_Collect_NamespaceFiltering(t *testing.T) {
 	configmap3 := createTestConfigMap("test-configmap-3", "monitoring")
 
 	client := fake.NewSimpleClientset(configmap1, configmap2, configmap3)
-	handler := NewConfigMapHandler(client)
+	handler := NewConfigMapHandler(client, false)
 	factory := informers.NewSharedInformerFactory(client, time.Hour)
 	logger := &testutils.MockLogger{}
 

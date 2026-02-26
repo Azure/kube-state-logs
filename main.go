@@ -28,6 +28,7 @@ func main() {
 		logLevel         = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 		kubeconfig       = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
 		containerEnvVars = flag.String("container-envvars", "", "Comma-separated list of environment variable names to capture from containers (e.g., 'GOMAXPROCS,MY_FLAG'). Empty disables capturing.")
+		configMapValues  = flag.Bool("configmap-include-values", false, "Include ConfigMap data values (data only, no binary data)")
 	)
 	flag.Parse()
 
@@ -57,13 +58,14 @@ func main() {
 
 	// Create configuration
 	cfg := &config.Config{
-		LogInterval:      *logInterval,
-		Resources:        config.ParseResourceList(*resources),
-		ResourceConfigs:  resourceConfigsList,
-		CRDs:             config.ParseCRDConfigs(*crdConfigs),
-		Namespaces:       config.ParseNamespaceList(*namespaces),
-		Kubeconfig:       *kubeconfig,
-		ContainerEnvVars: config.ParseContainerEnvVars(*containerEnvVars),
+		LogInterval:            *logInterval,
+		Resources:              config.ParseResourceList(*resources),
+		ResourceConfigs:        resourceConfigsList,
+		CRDs:                   config.ParseCRDConfigs(*crdConfigs),
+		Namespaces:             config.ParseNamespaceList(*namespaces),
+		Kubeconfig:             *kubeconfig,
+		ContainerEnvVars:       config.ParseContainerEnvVars(*containerEnvVars),
+		ConfigMapIncludeValues: *configMapValues,
 	}
 
 	// Validate configuration to prevent runtime issues

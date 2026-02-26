@@ -472,7 +472,8 @@ type CronJobData struct {
 type ConfigMapData struct {
 	NamespacedLabeledMetadata
 	// ConfigMap specific
-	DataKeys []string `json:"DataKeys"`
+	DataKeys []string          `json:"DataKeys"`
+	Data     map[string]string `json:"Data,omitempty"`
 }
 
 // SecretData represents secret-specific metrics (matching kube-state-metrics)

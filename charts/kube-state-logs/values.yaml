@@ -37,6 +37,8 @@ config:
   # Optional: list of environment variables to capture from each container (example: ["GOMAXPROCS"]).
   containerEnvVars:
     - "GOMAXPROCS"
+  # Optional: include ConfigMap data values.
+  configmapIncludeValues: false
 
 # Resource limits
 resources:

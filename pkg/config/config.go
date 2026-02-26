@@ -39,6 +39,8 @@ type Config struct {
 	// ContainerEnvVars is the list of environment variable names to capture from containers.
 	// If empty, no environment variables will be collected.
 	ContainerEnvVars []string
+	// ConfigMapIncludeValues controls whether ConfigMap data values are logged.
+	ConfigMapIncludeValues bool
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types

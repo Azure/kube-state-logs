@@ -148,7 +148,7 @@ func (c *Collector) registerHandlers() {
 		"deployment":                       resources.NewDeploymentHandler(c.client),
 		"job":                              resources.NewJobHandler(c.client),
 		"cronjob":                          resources.NewCronJobHandler(c.client),
-		"configmap":                        resources.NewConfigMapHandler(c.client),
+		"configmap":                        resources.NewConfigMapHandler(c.client, c.config.ConfigMapIncludeValues),
 		"secret":                           resources.NewSecretHandler(c.client),
 		"persistentvolumeclaim":            resources.NewPersistentVolumeClaimHandler(c.client),
 		"ingress":                          resources.NewIngressHandler(c.client),
