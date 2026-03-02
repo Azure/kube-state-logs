@@ -45,6 +45,7 @@ func createTestPodWithContainers(name, namespace string, containers []corev1.Con
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			UID:       "test-pod-uid",
 			Labels: map[string]string{
 				"app":     name,
 				"version": "v1",
@@ -191,6 +192,10 @@ func TestContainerHandler_createLogEntry(t *testing.T) {
 
 	if entry.PodName != "test-pod" {
 		t.Errorf("Expected pod name 'test-pod', got '%s'", entry.PodName)
+	}
+
+	if entry.PodUID != "test-pod-uid" {
+		t.Errorf("Expected PodUID 'test-pod-uid', got '%s'", entry.PodUID)
 	}
 
 	// Verify container-specific fields

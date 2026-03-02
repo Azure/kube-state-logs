@@ -96,6 +96,7 @@ type DeploymentData struct {
 type PodData struct {
 	ControllerCreatedResourceMetadata
 	// Basic pod info
+	PodUID        string `json:"PodUID"`
 	NodeName      string `json:"NodeName"`
 	HostIP        string `json:"HostIP"`
 	PodIP         string `json:"PodIP"`
@@ -169,6 +170,7 @@ type ContainerData struct {
 	ImageID     string `json:"ImageID"`
 	ContainerID string `json:"ContainerID"`
 	PodName     string `json:"PodName"`
+	PodUID      string `json:"PodUID"`
 	NodeName    string `json:"NodeName"`
 
 	// Container state
