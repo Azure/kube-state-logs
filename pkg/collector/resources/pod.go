@@ -296,6 +296,7 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 				CreatedByName: createdByName,
 			},
 		},
+		PodUID:                    string(pod.UID),
 		NodeName:                  pod.Spec.NodeName,
 		HostIP:                    pod.Status.HostIP,
 		PodIP:                     pod.Status.PodIP,

@@ -353,6 +353,7 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 		ImageID:                 container.ImageID,
 		ContainerID:             container.ContainerID,
 		PodName:                 pod.Name,
+		PodUID:                  string(pod.UID),
 		NodeName:                pod.Spec.NodeName,
 		Ready:                   &container.Ready,
 		RestartCount:            container.RestartCount,

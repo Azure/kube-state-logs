@@ -25,6 +25,7 @@ func createTestPod(name, namespace string, phase corev1.PodPhase) *corev1.Pod {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			UID:       "test-pod-uid",
 			Labels: map[string]string{
 				"app":     name,
 				"version": "v1",
@@ -187,6 +188,10 @@ func TestPodHandler_Collect(t *testing.T) {
 
 	if entry.Namespace != "default" {
 		t.Errorf("Expected namespace 'default', got '%s'", entry.Namespace)
+	}
+
+	if entry.PodUID != "test-pod-uid" {
+		t.Errorf("Expected PodUID 'test-pod-uid', got '%s'", entry.PodUID)
 	}
 }
 
