@@ -15,4 +15,4 @@
    - Log Level: {{ .Values.config.logLevel }}
 
 4. For more information:
-   - GitHub: https://github.com/azure/kube-state-metrics 
+   - GitHub: https://github.com/azure/kube-state-logs 
