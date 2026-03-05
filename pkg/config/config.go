@@ -8,13 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 )
 
 // ResourceConfig holds configuration for a specific resource type
 type ResourceConfig struct {
-	Name     string
-	Interval time.Duration
+	Name          string
+	Interval      time.Duration
+	LabelSelector labels.Selector
+	FieldSelector fields.Selector
 }
 
 // CRDConfig holds configuration for a specific CRD
@@ -35,6 +39,8 @@ type Config struct {
 	// ContainerEnvVars is the list of environment variable names to capture from containers.
 	// If empty, no environment variables will be collected.
 	ContainerEnvVars []string
+	// ConfigMapIncludeValues controls whether ConfigMap data values are logged.
+	ConfigMapIncludeValues bool
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types
@@ -60,15 +66,20 @@ func ParseResourceList(resources string) []string {
 	return result
 }
 
-// ParseResourceConfigs parses a comma-separated string of resource:interval pairs
-// Format: "deployments:5m,pods:1m,services:2m"
-func ParseResourceConfigs(resourceConfigs string, defaultInterval time.Duration) []ResourceConfig {
+// ParseResourceConfigs parses a comma-separated string of resource configs.
+// Format: "resource:interval[:labels=...][:fields=...]" (comma-separated list).
+// Use "\\," to escape commas inside selectors.
+// Example: "configmap:1m:labels=app=foo\\,env=prod,pod:30s:fields=metadata.name=my-pod"
+func ParseResourceConfigs(resourceConfigs string, defaultInterval time.Duration) ([]ResourceConfig, error) {
 	if resourceConfigs == "" {
-		return []ResourceConfig{}
+		return []ResourceConfig{}, nil
 	}
 
 	var configs []ResourceConfig
-	pairs := strings.Split(resourceConfigs, ",")
+	pairs, err := splitResourceConfigs(resourceConfigs)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, pair := range pairs {
 		pair = strings.TrimSpace(pair)
@@ -77,31 +88,102 @@ func ParseResourceConfigs(resourceConfigs string, defaultInterval time.Duration)
 		}
 
 		parts := strings.Split(pair, ":")
-		if len(parts) == 1 {
-			// Just resource name, use default interval
-			configs = append(configs, ResourceConfig{
-				Name:     strings.TrimSpace(parts[0]),
-				Interval: defaultInterval,
-			})
-		} else if len(parts) == 2 {
-			// Resource name and interval
-			resourceName := strings.TrimSpace(parts[0])
-			intervalStr := strings.TrimSpace(parts[1])
-
-			interval, err := time.ParseDuration(intervalStr)
-			if err != nil {
-				klog.Warningf("Invalid interval '%s' for resource '%s', using default: %v", intervalStr, resourceName, err)
-				interval = defaultInterval
-			}
-
-			configs = append(configs, ResourceConfig{
-				Name:     resourceName,
-				Interval: interval,
-			})
+		if len(parts) < 1 {
+			continue
 		}
+
+		resourceName := strings.TrimSpace(parts[0])
+		if resourceName == "" {
+			return nil, fmt.Errorf("resource name cannot be empty in resource-configs")
+		}
+
+		labelSelector := labels.Everything()
+		fieldSelector := fields.Everything()
+		interval := defaultInterval
+
+		intervalSet := false
+		for i := 1; i < len(parts); i++ {
+			segment := strings.TrimSpace(parts[i])
+			if segment == "" {
+				continue
+			}
+			switch {
+			case strings.HasPrefix(segment, "labels="):
+				value := strings.TrimPrefix(segment, "labels=")
+				if value == "" {
+					return nil, fmt.Errorf("labels selector cannot be empty for resource '%s'", resourceName)
+				}
+				parsed, err := labels.Parse(value)
+				if err != nil {
+					return nil, fmt.Errorf("invalid labels selector '%s' for resource '%s': %w", value, resourceName, err)
+				}
+				labelSelector = parsed
+			case strings.HasPrefix(segment, "fields="):
+				value := strings.TrimPrefix(segment, "fields=")
+				if value == "" {
+					return nil, fmt.Errorf("field selector cannot be empty for resource '%s'", resourceName)
+				}
+				parsed, err := fields.ParseSelector(value)
+				if err != nil {
+					return nil, fmt.Errorf("invalid field selector '%s' for resource '%s': %w", value, resourceName, err)
+				}
+				fieldSelector = parsed
+			default:
+				if intervalSet {
+					return nil, fmt.Errorf("unexpected setting '%s' for resource '%s'", segment, resourceName)
+				}
+				parsedInterval, err := time.ParseDuration(segment)
+				if err != nil {
+					return nil, fmt.Errorf("invalid interval '%s' for resource '%s': %w", segment, resourceName, err)
+				}
+				interval = parsedInterval
+				intervalSet = true
+			}
+		}
+
+		configs = append(configs, ResourceConfig{
+			Name:          resourceName,
+			Interval:      interval,
+			LabelSelector: labelSelector,
+			FieldSelector: fieldSelector,
+		})
 	}
 
-	return configs
+	return configs, nil
+}
+
+func splitResourceConfigs(resourceConfigs string) ([]string, error) {
+	var parts []string
+	var current strings.Builder
+	escaped := false
+
+	for _, r := range resourceConfigs {
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			continue
+		}
+
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+
+		if r == ',' {
+			parts = append(parts, current.String())
+			current.Reset()
+			continue
+		}
+
+		current.WriteRune(r)
+	}
+
+	if escaped {
+		return nil, fmt.Errorf("unterminated escape sequence in resource-configs")
+	}
+
+	parts = append(parts, current.String())
+	return parts, nil
 }
 
 // ParseCRDConfigs parses a comma-separated string of CRD configurations

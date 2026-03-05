@@ -54,6 +54,10 @@ func (h *CronJobHandler) Collect(ctx context.Context, namespaces []string) ([]an
 			continue
 		}
 
+		if !h.MatchesSelectors(cronjob) {
+			continue
+		}
+
 		entry := h.createLogEntry(cronjob)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

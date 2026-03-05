@@ -50,6 +50,10 @@ func (h *ValidatingAdmissionPolicyHandler) Collect(ctx context.Context, namespac
 			continue
 		}
 
+		if !h.MatchesSelectors(policy) {
+			continue
+		}
+
 		entry := h.createLogEntry(policy)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

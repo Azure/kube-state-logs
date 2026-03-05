@@ -54,6 +54,10 @@ func (h *LeaseHandler) Collect(ctx context.Context, namespaces []string) ([]any,
 			continue
 		}
 
+		if !h.MatchesSelectors(lease) {
+			continue
+		}
+
 		entry := h.createLogEntry(lease)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

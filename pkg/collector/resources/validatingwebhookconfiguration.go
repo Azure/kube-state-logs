@@ -50,6 +50,10 @@ func (h *ValidatingWebhookConfigurationHandler) Collect(ctx context.Context, nam
 			continue
 		}
 
+		if !h.MatchesSelectors(webhook) {
+			continue
+		}
+
 		entry := h.createLogEntry(webhook)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

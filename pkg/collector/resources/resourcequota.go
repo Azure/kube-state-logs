@@ -54,6 +54,10 @@ func (h *ResourceQuotaHandler) Collect(ctx context.Context, namespaces []string)
 			continue
 		}
 
+		if !h.MatchesSelectors(resourcequota) {
+			continue
+		}
+
 		entry := h.createLogEntry(resourcequota)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

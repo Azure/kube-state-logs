@@ -19,12 +19,14 @@ import (
 // ConfigMapHandler handles collection of configmap metrics
 type ConfigMapHandler struct {
 	utils.BaseHandler
+	includeValues bool
 }
 
 // NewConfigMapHandler creates a new ConfigMapHandler
-func NewConfigMapHandler(client kubernetes.Interface) *ConfigMapHandler {
+func NewConfigMapHandler(client kubernetes.Interface, includeValues bool) *ConfigMapHandler {
 	return &ConfigMapHandler{
-		BaseHandler: utils.NewBaseHandler(client),
+		BaseHandler:   utils.NewBaseHandler(client),
+		includeValues: includeValues,
 	}
 }
 
@@ -54,6 +56,10 @@ func (h *ConfigMapHandler) Collect(ctx context.Context, namespaces []string) ([]
 			continue
 		}
 
+		if !h.MatchesSelectors(configmap) {
+			continue
+		}
+
 		entry := h.createLogEntry(configmap)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)
@@ -70,6 +76,14 @@ func (h *ConfigMapHandler) createLogEntry(configmap *corev1.ConfigMap) types.Con
 	}
 	for key := range configmap.BinaryData {
 		dataKeys = append(dataKeys, key)
+	}
+
+	var dataValues map[string]string
+	if h.includeValues && len(configmap.Data) > 0 {
+		dataValues = make(map[string]string, len(configmap.Data))
+		for key, value := range configmap.Data {
+			dataValues[key] = value
+		}
 	}
 
 	data := types.ConfigMapData{
@@ -89,6 +103,7 @@ func (h *ConfigMapHandler) createLogEntry(configmap *corev1.ConfigMap) types.Con
 			},
 		},
 		DataKeys: dataKeys,
+		Data:     dataValues,
 	}
 
 	return data

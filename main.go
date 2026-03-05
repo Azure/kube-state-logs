@@ -22,12 +22,13 @@ func main() {
 	var (
 		logInterval      = flag.Duration("log-interval", 1*time.Minute, "Default interval between log outputs")
 		resources        = flag.String("resources", "pod,container,service,node,deployment,job,cronjob,configmap,secret,persistentvolumeclaim,ingress,horizontalpodautoscaler,serviceaccount,endpoints,persistentvolume,resourcequota,poddisruptionbudget,storageclass,networkpolicy,replicationcontroller,limitrange,lease,role,clusterrole,rolebinding,clusterrolebinding,volumeattachment,certificatesigningrequest,namespace,daemonset,statefulset,replicaset,mutatingwebhookconfiguration,validatingwebhookconfiguration,ingressclass,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding", "Comma-separated list of resources to monitor")
-		resourceConfigs  = flag.String("resource-configs", "", "Comma-separated list of resource:interval pairs (e.g., 'deployments:5m,pods:1m,services:2m'). If not specified, uses log-interval for all resources.")
+		resourceConfigs  = flag.String("resource-configs", "", "Comma-separated list of resource configs: 'resource:interval[:labels=...][:fields=...]'. Use '\\\\,' to escape commas in selectors (e.g., 'configmap:1m:labels=app=foo\\\\,env=prod'). If not specified, uses log-interval for all resources.")
 		crdConfigs       = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
 		namespaces       = flag.String("namespaces", "", "Comma-separated list of namespaces to monitor (empty for all)")
 		logLevel         = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 		kubeconfig       = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
 		containerEnvVars = flag.String("container-envvars", "", "Comma-separated list of environment variable names to capture from containers (e.g., 'GOMAXPROCS,MY_FLAG'). Empty disables capturing.")
+		configMapValues  = flag.Bool("configmap-include-values", false, "Include ConfigMap data values (data only, no binary data)")
 	)
 	flag.Parse()
 
@@ -39,7 +40,10 @@ func main() {
 	klog.Info("Starting kube-state-logs...")
 
 	// Parse resource configurations
-	resourceConfigsList := config.ParseResourceConfigs(*resourceConfigs, *logInterval)
+	resourceConfigsList, err := config.ParseResourceConfigs(*resourceConfigs, *logInterval)
+	if err != nil {
+		klog.Fatalf("Failed to parse resource configs: %v", err)
+	}
 
 	// If no specific resource configs provided, create default ones from resources list
 	if len(resourceConfigsList) == 0 {
@@ -54,13 +58,14 @@ func main() {
 
 	// Create configuration
 	cfg := &config.Config{
-		LogInterval:      *logInterval,
-		Resources:        config.ParseResourceList(*resources),
-		ResourceConfigs:  resourceConfigsList,
-		CRDs:             config.ParseCRDConfigs(*crdConfigs),
-		Namespaces:       config.ParseNamespaceList(*namespaces),
-		Kubeconfig:       *kubeconfig,
-		ContainerEnvVars: config.ParseContainerEnvVars(*containerEnvVars),
+		LogInterval:            *logInterval,
+		Resources:              config.ParseResourceList(*resources),
+		ResourceConfigs:        resourceConfigsList,
+		CRDs:                   config.ParseCRDConfigs(*crdConfigs),
+		Namespaces:             config.ParseNamespaceList(*namespaces),
+		Kubeconfig:             *kubeconfig,
+		ContainerEnvVars:       config.ParseContainerEnvVars(*containerEnvVars),
+		ConfigMapIncludeValues: *configMapValues,
 	}
 
 	// Validate configuration to prevent runtime issues

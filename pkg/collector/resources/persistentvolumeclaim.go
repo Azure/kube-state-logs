@@ -54,6 +54,10 @@ func (h *PersistentVolumeClaimHandler) Collect(ctx context.Context, namespaces [
 			continue
 		}
 
+		if !h.MatchesSelectors(pvc) {
+			continue
+		}
+
 		entry := h.createLogEntry(pvc)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

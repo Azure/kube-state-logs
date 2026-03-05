@@ -54,6 +54,10 @@ func (h *DaemonSetHandler) Collect(ctx context.Context, namespaces []string) ([]
 			continue
 		}
 
+		if !h.MatchesSelectors(daemonset) {
+			continue
+		}
+
 		entry := h.createLogEntry(daemonset)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

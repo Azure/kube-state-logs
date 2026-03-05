@@ -50,6 +50,10 @@ func (h *IngressClassHandler) Collect(ctx context.Context, namespaces []string) 
 			continue
 		}
 
+		if !h.MatchesSelectors(ingressclass) {
+			continue
+		}
+
 		entry := h.createLogEntry(ingressclass)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

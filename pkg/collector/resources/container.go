@@ -88,6 +88,10 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 			continue
 		}
 
+		if !h.MatchesSelectors(pod) {
+			continue
+		}
+
 		// Process regular containers
 		for _, container := range pod.Status.ContainerStatuses {
 			containerKey := h.getContainerKey(pod.Namespace, pod.Name, container.Name)

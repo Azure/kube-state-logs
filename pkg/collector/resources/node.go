@@ -64,6 +64,10 @@ func (h *NodeHandler) Collect(ctx context.Context, namespaces []string) ([]any, 
 			continue
 		}
 
+		if !h.MatchesSelectors(node) {
+			continue
+		}
+
 		entry := h.createLogEntry(node)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

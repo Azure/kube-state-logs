@@ -54,6 +54,10 @@ func (h *RoleBindingHandler) Collect(ctx context.Context, namespaces []string) (
 			continue
 		}
 
+		if !h.MatchesSelectors(rolebinding) {
+			continue
+		}
+
 		entry := h.createLogEntry(rolebinding)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

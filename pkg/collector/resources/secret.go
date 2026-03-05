@@ -55,6 +55,10 @@ func (h *SecretHandler) Collect(ctx context.Context, namespaces []string) ([]any
 			continue
 		}
 
+		if !h.MatchesSelectors(secret) {
+			continue
+		}
+
 		entry := h.createLogEntry(secret)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)

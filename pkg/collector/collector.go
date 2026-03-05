@@ -11,6 +11,8 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -146,7 +148,7 @@ func (c *Collector) registerHandlers() {
 		"deployment":                       resources.NewDeploymentHandler(c.client),
 		"job":                              resources.NewJobHandler(c.client),
 		"cronjob":                          resources.NewCronJobHandler(c.client),
-		"configmap":                        resources.NewConfigMapHandler(c.client),
+		"configmap":                        resources.NewConfigMapHandler(c.client, c.config.ConfigMapIncludeValues),
 		"secret":                           resources.NewSecretHandler(c.client),
 		"persistentvolumeclaim":            resources.NewPersistentVolumeClaimHandler(c.client),
 		"ingress":                          resources.NewIngressHandler(c.client),
@@ -358,6 +360,11 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 		}
 	}
 
+	resourceConfigMap := make(map[string]config.ResourceConfig)
+	for _, rc := range c.config.ResourceConfigs {
+		resourceConfigMap[rc.Name] = rc
+	}
+
 	// Start tickers for all resources
 	for resourceName, interval := range resourceIntervals {
 		// Check if we have a handler for this resource
@@ -365,6 +372,14 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 		if !exists {
 			klog.Warningf("No handler found for resource type: %s", resourceName)
 			continue
+		}
+
+		if rc, ok := resourceConfigMap[resourceName]; ok {
+			if configurable, ok := handler.(interface {
+				SetSelectors(labels.Selector, fields.Selector)
+			}); ok {
+				configurable.SetSelectors(rc.LabelSelector, rc.FieldSelector)
+			}
 		}
 
 		klog.Infof("Starting ticker for %s with interval %v", resourceName, interval)

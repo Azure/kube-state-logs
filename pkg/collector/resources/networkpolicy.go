@@ -54,6 +54,10 @@ func (h *NetworkPolicyHandler) Collect(ctx context.Context, namespaces []string)
 			continue
 		}
 
+		if !h.MatchesSelectors(networkpolicy) {
+			continue
+		}
+
 		entry := h.createLogEntry(networkpolicy)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)
