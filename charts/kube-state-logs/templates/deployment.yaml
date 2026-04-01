@@ -21,7 +21,7 @@ spec:
         {{- include "kube-state-logs.selectorLabels" . | nindent 8 }}
       {{- if .Values.config.enableADXMonAnnotations }}
       annotations:
-        kubernetes.azure.com/log-keys: "{{ include "kube-state-logs.logKeysAnnotation" . }}"
+        adx-mon/log-keys: "{{ include "kube-state-logs.logKeysAnnotation" . }}"
         adx-mon/scrape: "true"
         adx-mon/log-parsers: "json"
         adx-mon/log-destination: "{{ .Values.config.adxMonLogDestination }}:KubeStateLogs"
