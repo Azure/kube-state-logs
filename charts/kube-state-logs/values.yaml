@@ -33,6 +33,8 @@ config:
   # Enable ADX-Mon annotations on the pods.
   enableADXMonAnnotations: false
   adxMonLogDestination: ""
+  # The annotation key used for log-keys routing. Override if your collector uses a different key.
+  adxMonLogKeysAnnotationKey: "adx-mon/log-keys"
 
   # Optional: list of environment variables to capture from each container (example: ["GOMAXPROCS"]).
   containerEnvVars:
