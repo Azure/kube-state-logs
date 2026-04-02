@@ -58,7 +58,7 @@ annotations:
   adx-mon/scrape: "true"
   adx-mon/log-parsers: "json"
   adx-mon/log-destination: "<adxMonLogDestination>:KubeStateLogs"
-  kubernetes.azure.com/log-keys: "ResourceType:pod:<database>:KubePodSnapshot,ResourceType:deployment:<database>:KubeDeploymentSnapshot,..."
+  adx-mon/log-keys: "ResourceType:pod:<database>:KubePodSnapshot,ResourceType:deployment:<database>:KubeDeploymentSnapshot,..."
 ```
 
 ### Annotation Details
@@ -68,7 +68,7 @@ annotations:
 | `adx-mon/scrape`                  | Tells ADX-Mon to collect logs from this pod                  |
 | `adx-mon/log-parsers`             | Specifies JSON parsing for structured logs                   |
 | `adx-mon/log-destination`         | Default destination database and table                       |
-| `kubernetes.azure.com/log-keys`   | Routes logs to specific tables based on `ResourceType` field |
+| `adx-mon/log-keys`                | Routes logs to specific tables based on `ResourceType` field |
 
 ### Log Routing
 
