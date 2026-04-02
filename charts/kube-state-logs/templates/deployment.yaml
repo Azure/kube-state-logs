@@ -73,7 +73,9 @@ spec:
             {{- if .Values.config.containerEnvVars }}
             - --container-envvars={{ .Values.config.containerEnvVars | join "," }}
             {{- end }}
+            {{- if .Values.config.configmapIncludeValues }}
             - --configmap-include-values={{ .Values.config.configmapIncludeValues }}
+            {{- end }}
           resources:
             limits:
               cpu: {{ .Values.resources.limits.cpu }}
