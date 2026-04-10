@@ -103,6 +103,10 @@ Generate log-keys annotation from resources list
 {{- $snapshotName := include "kube-state-logs.resourceSnapshotName" $resource -}}
 {{- $annotation = printf "%sResourceType:%s:%s:%s%s" $annotation $resource $adxMonDestination "Kube" $snapshotName -}}
 {{- end -}}
+{{- /* Add init_container routing to KubeContainerSnapshot when container resource is enabled */ -}}
+{{- if has "container" .Values.config.resources -}}
+{{- $annotation = printf "%s,ResourceType:init_container:%s:KubeContainerSnapshot" $annotation $adxMonDestination -}}
+{{- end -}}
 {{- /* Add CRD configurations to log-keys annotation */ -}}
 {{- if .Values.config.crdConfigs -}}
 {{- range .Values.config.crdConfigs -}}
