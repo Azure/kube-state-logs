@@ -29,6 +29,9 @@ func main() {
 		kubeconfig       = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
 		containerEnvVars = flag.String("container-envvars", "", "Comma-separated list of environment variable names to capture from containers (e.g., 'GOMAXPROCS,MY_FLAG'). Empty disables capturing.")
 		configMapValues  = flag.Bool("configmap-include-values", false, "Include ConfigMap data values (data only, no binary data)")
+		mode             = flag.String("mode", "deployment", "Operational mode: 'deployment' (default, uses K8s API) or 'daemonset' (uses local kubelet API)")
+		nodeName         = flag.String("node-name", "", "Node name for daemonset mode (typically set via NODE_NAME env var)")
+		kubeletURL       = flag.String("kubelet-url", "https://localhost:10250", "Base URL for the kubelet API (daemonset mode only)")
 	)
 	flag.Parse()
 
@@ -66,6 +69,9 @@ func main() {
 		Kubeconfig:             *kubeconfig,
 		ContainerEnvVars:       config.ParseContainerEnvVars(*containerEnvVars),
 		ConfigMapIncludeValues: *configMapValues,
+		Mode:                   *mode,
+		NodeName:               *nodeName,
+		KubeletURL:             *kubeletURL,
 	}
 
 	// Validate configuration to prevent runtime issues
