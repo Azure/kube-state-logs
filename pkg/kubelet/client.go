@@ -137,3 +137,9 @@ func (c *Client) readToken() (string, error) {
 func NanoCoresToMilliCores(nanoCores uint64) int64 {
 	return int64(nanoCores / 1_000_000)
 }
+
+// SetHTTPClient overrides the HTTP client used by the kubelet client.
+// This is intended for testing only.
+func (c *Client) SetHTTPClient(httpClient *http.Client) {
+	c.httpClient = httpClient
+}
