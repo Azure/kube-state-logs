@@ -49,7 +49,7 @@ func (h *KubeletContainerHandler) Process(pods []corev1.Pod, stats *statsv1alpha
 		// Process regular containers
 		for j := range pod.Status.ContainerStatuses {
 			container := &pod.Status.ContainerStatuses[j]
-			containerKey := h.getContainerKey(pod.Namespace, pod.Name, container.Name)
+			containerKey := h.getContainerKey(string(pod.UID), pod.Namespace, pod.Name, container.Name)
 			currentState := h.getContainerState(container)
 			currentStates[containerKey] = currentState
 
@@ -69,7 +69,7 @@ func (h *KubeletContainerHandler) Process(pods []corev1.Pod, stats *statsv1alpha
 		// Process init containers
 		for j := range pod.Status.InitContainerStatuses {
 			container := &pod.Status.InitContainerStatuses[j]
-			containerKey := h.getContainerKey(pod.Namespace, pod.Name, container.Name)
+			containerKey := h.getContainerKey(string(pod.UID), pod.Namespace, pod.Name, container.Name)
 			currentState := h.getContainerState(container)
 			currentStates[containerKey] = currentState
 
@@ -108,8 +108,8 @@ func (h *KubeletContainerHandler) buildStatsLookup(stats *statsv1alpha1.Summary)
 	return lookup
 }
 
-func (h *KubeletContainerHandler) getContainerKey(namespace, podName, containerName string) string {
-	return fmt.Sprintf("%s/%s/%s", namespace, podName, containerName)
+func (h *KubeletContainerHandler) getContainerKey(podUID, namespace, podName, containerName string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", podUID, namespace, podName, containerName)
 }
 
 func (h *KubeletContainerHandler) getContainerState(container *corev1.ContainerStatus) string {
