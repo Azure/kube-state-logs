@@ -274,4 +274,4 @@ subjects:
   - kind: ServiceAccount
     name: kube-state-logs-daemonset
     namespace: {{ .Release.Namespace }}
-{{- end }} 
+{{- end }}
