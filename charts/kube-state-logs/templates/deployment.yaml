@@ -51,7 +51,17 @@ spec:
           command: ["/kube-state-logs"]
           args:
             - --log-interval={{ .Values.config.logInterval }}
+            {{- if .Values.daemonSet.enabled }}
+            {{- $filtered := list }}
+            {{- range .Values.config.resources }}
+            {{- if and (ne . "pod") (ne . "container") }}
+            {{- $filtered = append $filtered . }}
+            {{- end }}
+            {{- end }}
+            - --resources={{ $filtered | join "," }}
+            {{- else }}
             - --resources={{ .Values.config.resources | join "," }}
+            {{- end }}
             {{- if .Values.config.resourceConfigs }}
             - --resource-configs={{ .Values.config.resourceConfigs | join "," }}
             {{- end }}
