@@ -19,11 +19,11 @@ import (
 )
 
 const (
-	defaultTokenPath  = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-	defaultTimeout    = 30 * time.Second
-	maxResponseBytes  = 100 * 1024 * 1024 // 100MB safety limit
-	podsEndpoint      = "/pods"
-	statsSummaryPath  = "/stats/summary"
+	defaultTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	defaultTimeout   = 30 * time.Second
+	maxResponseBytes = 100 * 1024 * 1024 // 100MB safety limit
+	podsEndpoint     = "/pods"
+	statsSummaryPath = "/stats/summary"
 )
 
 // Client communicates with the local kubelet API to retrieve pod and stats data.

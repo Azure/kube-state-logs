@@ -24,9 +24,9 @@ func TestKubeletContainerHandler_Process(t *testing.T) {
 	pods := []corev1.Pod{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-pod",
-				Namespace: "default",
-				UID:       "uid-1",
+				Name:              "test-pod",
+				Namespace:         "default",
+				UID:               "uid-1",
 				CreationTimestamp: now,
 			},
 			Spec: corev1.PodSpec{
@@ -135,9 +135,9 @@ func TestKubeletContainerHandler_NilStats(t *testing.T) {
 	pods := []corev1.Pod{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-pod",
-				Namespace: "default",
-				UID:       "uid-1",
+				Name:              "test-pod",
+				Namespace:         "default",
+				UID:               "uid-1",
 				CreationTimestamp: now,
 			},
 			Spec: corev1.PodSpec{NodeName: "test-node"},

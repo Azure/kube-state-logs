@@ -64,8 +64,8 @@ func setupKubeletTestServer(t *testing.T) (*httptest.Server, *config.Config) {
 				},
 				Containers: []statsv1alpha1.ContainerStats{
 					{
-						Name: "app",
-						CPU:  &statsv1alpha1.CPUStats{UsageNanoCores: &cpuNano},
+						Name:   "app",
+						CPU:    &statsv1alpha1.CPUStats{UsageNanoCores: &cpuNano},
 						Memory: &statsv1alpha1.MemoryStats{WorkingSetBytes: &memBytes},
 					},
 				},

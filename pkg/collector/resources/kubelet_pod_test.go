@@ -20,10 +20,10 @@ func TestKubeletPodHandler_Process(t *testing.T) {
 	pods := []corev1.Pod{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-pod",
-				Namespace: "default",
-				UID:       "uid-1",
-				Labels:    map[string]string{"app": "test"},
+				Name:              "test-pod",
+				Namespace:         "default",
+				UID:               "uid-1",
+				Labels:            map[string]string{"app": "test"},
 				CreationTimestamp: now,
 				OwnerReferences: []metav1.OwnerReference{
 					{
@@ -146,8 +146,8 @@ func TestKubeletPodHandler_QoSDefault(t *testing.T) {
 	pods := []corev1.Pod{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "best-effort-pod",
-				Namespace: "default",
+				Name:              "best-effort-pod",
+				Namespace:         "default",
 				CreationTimestamp: metav1.Now(),
 			},
 			Status: corev1.PodStatus{
