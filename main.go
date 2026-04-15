@@ -79,12 +79,6 @@ func main() {
 		klog.Fatalf("Configuration validation failed: %v", err)
 	}
 
-	// Create collector
-	collector, err := collector.New(cfg)
-	if err != nil {
-		klog.Fatalf("Failed to create collector: %v", err)
-	}
-
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -99,9 +93,25 @@ func main() {
 		cancel()
 	}()
 
-	// Start the collector
-	if err := collector.Run(ctx); err != nil {
-		klog.Fatalf("Collector failed: %v", err)
+	// Branch based on operational mode
+	if cfg.Mode == "daemonset" {
+		klog.Infof("Running in daemonset mode on node %s", cfg.NodeName)
+		kubeletCollector, err := collector.NewKubeletCollector(cfg)
+		if err != nil {
+			klog.Fatalf("Failed to create kubelet collector: %v", err)
+		}
+		if err := kubeletCollector.Run(ctx); err != nil {
+			klog.Fatalf("Kubelet collector failed: %v", err)
+		}
+	} else {
+		// Default deployment mode
+		c, err := collector.New(cfg)
+		if err != nil {
+			klog.Fatalf("Failed to create collector: %v", err)
+		}
+		if err := c.Run(ctx); err != nil {
+			klog.Fatalf("Collector failed: %v", err)
+		}
 	}
 
 	klog.Info("kube-state-logs stopped")
