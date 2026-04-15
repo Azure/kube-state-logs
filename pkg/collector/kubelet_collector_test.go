@@ -113,7 +113,9 @@ func TestKubeletCollector_CollectAndLog(t *testing.T) {
 	// Override kubelet client to use test server
 	tokenDir := t.TempDir()
 	tokenPath := filepath.Join(tokenDir, "token")
-	os.WriteFile(tokenPath, []byte("test-token"), 0600)
+	if err := os.WriteFile(tokenPath, []byte("test-token"), 0600); err != nil {
+		t.Fatalf("failed to write token: %v", err)
+	}
 	collector.kubeletClient = kubelet.NewClient(server.URL, tokenPath)
 	collector.kubeletClient.SetHTTPClient(server.Client())
 
@@ -136,7 +138,9 @@ func TestKubeletCollector_RunWithCancellation(t *testing.T) {
 
 	tokenDir := t.TempDir()
 	tokenPath := filepath.Join(tokenDir, "token")
-	os.WriteFile(tokenPath, []byte("test-token"), 0600)
+	if err := os.WriteFile(tokenPath, []byte("test-token"), 0600); err != nil {
+		t.Fatalf("failed to write token: %v", err)
+	}
 	collector.kubeletClient = kubelet.NewClient(server.URL, tokenPath)
 	collector.kubeletClient.SetHTTPClient(server.Client())
 
