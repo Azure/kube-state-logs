@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -134,7 +135,7 @@ func (c *Client) readToken() (string, error) {
 		klog.V(4).Infof("Failed to read token from %s: %v", c.tokenPath, err)
 		return "", err
 	}
-	return string(data), nil
+	return strings.TrimSpace(string(data)), nil
 }
 
 // NanoCoresToMilliCores converts CPU usage from nanocores to millicores.
