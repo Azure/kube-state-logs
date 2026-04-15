@@ -14,9 +14,9 @@
 3. Configuration:
    - Log Interval: {{ .Values.config.logInterval }}
    {{- if .Values.daemonSet.enabled }}
-   - Mode: DaemonSet (pod and container collected via local kubelet API)
-   - Deployment Resources: {{ without .Values.config.resources "pod" "container" }}
-   - DaemonSet Resources: [pod, container]
+   - Mode: DaemonSet (scheduled pod and container collected via local kubelet API)
+   - Deployment Resources: {{ without .Values.config.resources "container" }} (pod limited to unscheduled only)
+   - DaemonSet Resources: [pod, container] (scheduled pods via kubelet)
    {{- else }}
    - Resources: {{ .Values.config.resources }}
    {{- end }}

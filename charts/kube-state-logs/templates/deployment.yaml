@@ -54,11 +54,12 @@ spec:
             {{- if .Values.daemonSet.enabled }}
             {{- $filtered := list }}
             {{- range .Values.config.resources }}
-            {{- if and (ne . "pod") (ne . "container") }}
+            {{- if ne . "container" }}
             {{- $filtered = append $filtered . }}
             {{- end }}
             {{- end }}
             - --resources={{ $filtered | join "," }}
+            - --resource-configs=pod:{{ .Values.config.logInterval }}:fields=spec.nodeName=
             {{- else }}
             - --resources={{ .Values.config.resources | join "," }}
             {{- end }}

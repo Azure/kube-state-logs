@@ -95,7 +95,7 @@ daemonSet:
   enabled: true
 ```
 
-When enabled, the DaemonSet pods use `hostNetwork` to reach the local kubelet at `localhost:10250` and authenticate with the pod's service account token. The Deployment automatically excludes `pod` and `container` from its resource list to avoid duplicate logs.
+When enabled, the DaemonSet pods use `hostNetwork` to reach the local kubelet at `localhost:10250` and authenticate with the pod's service account token. The Deployment automatically excludes `container` from its resource list and switches to logging only unscheduled pods (those not yet assigned to a node), while the DaemonSet handles all scheduled pod and container data. This ensures pods are visible during their entire lifecycle — from pending/unscheduled through running and termination.
 
 ## Example Output
 

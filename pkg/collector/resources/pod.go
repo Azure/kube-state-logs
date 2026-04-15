@@ -9,6 +9,8 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 
@@ -47,6 +49,33 @@ func (h *PodHandler) SetupInformer(factory informers.SharedInformerFactory, logg
 	return nil
 }
 
+// MatchesPodSelectors checks whether the pod matches the configured selectors.
+// Extends the base MatchesSelectors by adding spec.nodeName to the field set,
+// enabling field selectors like "spec.nodeName=" to match only unscheduled pods.
+func (h *PodHandler) MatchesPodSelectors(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+
+	ls, fs := h.GetSelectors()
+	if ls != nil && !ls.Matches(labels.Set(pod.GetLabels())) {
+		return false
+	}
+
+	if fs != nil {
+		fieldSet := fields.Set{
+			"metadata.name":      pod.GetName(),
+			"metadata.namespace": pod.GetNamespace(),
+			"spec.nodeName":      pod.Spec.NodeName,
+		}
+		if !fs.Matches(fieldSet) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Collect gathers pod metrics from the cluster (uses cache)
 func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, error) {
 	var entries []any
@@ -65,7 +94,7 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 			continue
 		}
 
-		if !h.MatchesSelectors(pod) {
+		if !h.MatchesPodSelectors(pod) {
 			continue
 		}
 
