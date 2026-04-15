@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -97,8 +98,11 @@ func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read service account token: %w", err)
 	}
 
-	url := c.baseURL + path
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	reqURL, err := url.JoinPath(c.baseURL, path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
