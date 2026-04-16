@@ -12,6 +12,7 @@ COPY . .
 
 # Test stage — run with: docker build --target test .
 FROM source AS test
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN mkdir -p /out && \
     go test -v -coverprofile=/out/coverage.txt ./... 2>&1 | tee /out/test-report.txt
 
