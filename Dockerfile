@@ -1,5 +1,5 @@
-# Build stage
-FROM mcr.microsoft.com/oss/go/microsoft/golang:1.25-fips-azurelinux3.0 AS builder
+# Source stage
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.25-fips-azurelinux3.0 AS source
 
 WORKDIR /src
 
@@ -10,7 +10,14 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
+# Test stage — run with: docker build --target test .
+FROM source AS test
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN mkdir -p /out && \
+    go test -v -coverprofile=/out/coverage.txt ./... 2>&1 | tee /out/test-report.txt
+
+# Build stage
+FROM source AS build
 RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /out/kube-state-logs .
 
 # Runtime stage
@@ -21,7 +28,7 @@ RUN tdnf install -y shadow-utils && \
     id nonroot &>/dev/null || useradd -r -u 65532 -s /sbin/nologin nonroot && \
     tdnf clean all
 
-COPY --from=builder /out/kube-state-logs /kube-state-logs
+COPY --from=build /out/kube-state-logs /kube-state-logs
 
 USER nonroot:nonroot
 

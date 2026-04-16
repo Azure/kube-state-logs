@@ -1,4 +1,4 @@
-.PHONY: build push clean help
+.PHONY: build test push clean help
 
 IMAGE_NAME ?= kube-state-logs
 IMAGE_TAG ?= latest
@@ -7,6 +7,10 @@ REGISTRY ?= ghcr.io/azure/
 # Build Docker image
 build:
 	docker build -t $(REGISTRY)$(IMAGE_NAME):$(IMAGE_TAG) .
+
+# Run tests in Docker (FIPS-compliant, matches CI)
+test:
+	docker build --progress=plain --target test .
 
 # Build for multiple platforms
 build-multi:
@@ -24,6 +28,7 @@ clean:
 help:
 	@echo "Available targets:"
 	@echo "  build       - Build Docker image"
+	@echo "  test        - Run tests in Docker (FIPS-compliant, matches CI)"
 	@echo "  build-multi - Build Docker image for multiple platforms"
 	@echo "  push        - Push Docker image"
 	@echo "  clean       - Remove local Docker image"
