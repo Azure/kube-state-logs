@@ -44,17 +44,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.25'
-          cache: true
-
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Run tests
-        run: go test -v ./...
+      - name: Run tests in Docker
+        run: make test
 
   helm-lint:
     name: Helm Chart Lint
