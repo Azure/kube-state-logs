@@ -1,12 +1,25 @@
 1. Check the logs:
+   {{- if .Values.daemonSet.enabled }}
+   # Deployment (cluster-scoped resources):
    kubectl logs --namespace {{ .Release.Namespace }} deployment/kube-state-logs
+   # DaemonSet (per-node pod/container data via kubelet):
+   kubectl logs --namespace {{ .Release.Namespace }} daemonset/kube-state-logs-daemonset
+   {{- else }}
+   kubectl logs --namespace {{ .Release.Namespace }} deployment/kube-state-logs
+   {{- end }}
 
 2. Check the status:
    kubectl get pods --namespace {{ .Release.Namespace }} -l app.kubernetes.io/name=kube-state-logs
 
 3. Configuration:
    - Log Interval: {{ .Values.config.logInterval }}
+   {{- if .Values.daemonSet.enabled }}
+   - Mode: DaemonSet (scheduled pod and container collected via local kubelet API)
+   - Deployment Resources: {{ without .Values.config.resources "container" }} (pod limited to unscheduled only)
+   - DaemonSet Resources: [pod, container] (scheduled pods via kubelet)
+   {{- else }}
    - Resources: {{ .Values.config.resources }}
+   {{- end }}
    {{- if .Values.config.namespaces }}
    - Namespaces: {{ .Values.config.namespaces }}
    {{- else }}
@@ -15,4 +28,4 @@
    - Log Level: {{ .Values.config.logLevel }}
 
 4. For more information:
-   - GitHub: https://github.com/azure/kube-state-logs 
+   - GitHub: https://github.com/azure/kube-state-logs

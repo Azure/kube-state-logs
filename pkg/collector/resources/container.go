@@ -94,7 +94,7 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 
 		// Process regular containers
 		for _, container := range pod.Status.ContainerStatuses {
-			containerKey := h.getContainerKey(pod.Namespace, pod.Name, container.Name)
+			containerKey := h.getContainerKey(string(pod.UID), pod.Namespace, pod.Name, container.Name)
 			currentState := h.getContainerState(&container)
 			currentStates[containerKey] = currentState
 
@@ -115,7 +115,7 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 
 		// Process init containers
 		for _, container := range pod.Status.InitContainerStatuses {
-			containerKey := h.getContainerKey(pod.Namespace, pod.Name, container.Name)
+			containerKey := h.getContainerKey(string(pod.UID), pod.Namespace, pod.Name, container.Name)
 			currentState := h.getContainerState(&container)
 			currentStates[containerKey] = currentState
 
@@ -145,8 +145,15 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 	return entries, nil
 }
 
-// getContainerKey creates a unique key for a container
-func (h *ContainerHandler) getContainerKey(namespace, podName, containerName string) string {
+// getContainerKey creates a unique key for a container, including pod UID
+// to prevent state cache collisions when a pod is recreated with the same name.
+func (h *ContainerHandler) getContainerKey(podUID, namespace, podName, containerName string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", podUID, namespace, podName, containerName)
+}
+
+// getMetricsCacheKey creates a key for the metrics cache. The metrics API does not
+// expose pod UID, so this uses namespace/podName/containerName only.
+func (h *ContainerHandler) getMetricsCacheKey(namespace, podName, containerName string) string {
 	return fmt.Sprintf("%s/%s/%s", namespace, podName, containerName)
 }
 
@@ -412,7 +419,7 @@ func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []s
 		for _, podMetrics := range podMetricsList.Items {
 			for i := range podMetrics.Containers {
 				containerMetrics := &podMetrics.Containers[i]
-				key := h.getContainerKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
+				key := h.getMetricsCacheKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
 				h.metricsCache.Add(key, containerMetrics)
 			}
 		}
@@ -432,7 +439,7 @@ func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []s
 			for _, podMetrics := range podMetricsList.Items {
 				for i := range podMetrics.Containers {
 					containerMetrics := &podMetrics.Containers[i]
-					key := h.getContainerKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
+					key := h.getMetricsCacheKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
 					h.metricsCache.Add(key, containerMetrics)
 				}
 			}
@@ -442,7 +449,7 @@ func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []s
 
 // getContainerUsageFromCache retrieves CPU and memory usage for a container from the metrics cache
 func (h *ContainerHandler) getContainerUsageFromCache(namespace, podName, containerName string) (cpuMillicore *int64, memoryBytes *int64) {
-	key := h.getContainerKey(namespace, podName, containerName)
+	key := h.getMetricsCacheKey(namespace, podName, containerName)
 
 	if obj, exists := h.metricsCache.Get(key); exists {
 		if containerMetrics, ok := obj.(*metricsv1beta1.ContainerMetrics); ok {

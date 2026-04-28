@@ -4,101 +4,30 @@
 package resources
 
 import (
-	"context"
 	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
 
-	"github.com/azure/kube-state-logs/pkg/interfaces"
 	"github.com/azure/kube-state-logs/pkg/types"
 	"github.com/azure/kube-state-logs/pkg/utils"
 )
 
-// PodHandler handles collection of pod metrics
-type PodHandler struct {
-	utils.BaseHandler
+// KubeletPodHandler processes pod data obtained from the kubelet API.
+type KubeletPodHandler struct{}
+
+// NewKubeletPodHandler creates a new KubeletPodHandler.
+func NewKubeletPodHandler() *KubeletPodHandler {
+	return &KubeletPodHandler{}
 }
 
-// containerResourceAggregation holds aggregated resource values for a pod's containers
-type containerResourceAggregation struct {
-	ContainerCount            int32
-	InitContainerCount        int32
-	TotalRequestsCPUMillicore *int64
-	TotalRequestsMemoryBytes  *int64
-	TotalLimitsCPUMillicore   *int64
-	TotalLimitsMemoryBytes    *int64
-}
-
-// NewPodHandler creates a new PodHandler
-func NewPodHandler(client kubernetes.Interface) *PodHandler {
-	return &PodHandler{
-		BaseHandler: utils.NewBaseHandler(client),
-	}
-}
-
-// SetupInformer sets up the pod informer
-func (h *PodHandler) SetupInformer(factory informers.SharedInformerFactory, logger interfaces.Logger, resyncPeriod time.Duration) error {
-	// Create pod informer
-	informer := factory.Core().V1().Pods().Informer()
-	h.SetupBaseInformer(informer, logger)
-	return nil
-}
-
-// MatchesPodSelectors checks whether the pod matches the configured selectors.
-// Extends the base MatchesSelectors by adding spec.nodeName to the field set,
-// enabling field selectors like "spec.nodeName=" to match only unscheduled pods.
-func (h *PodHandler) MatchesPodSelectors(pod *corev1.Pod) bool {
-	if pod == nil {
-		return false
-	}
-
-	ls, fs := h.GetSelectors()
-	if ls != nil && !ls.Matches(labels.Set(pod.GetLabels())) {
-		return false
-	}
-
-	if fs != nil {
-		fieldSet := fields.Set{
-			"metadata.name":      pod.GetName(),
-			"metadata.namespace": pod.GetNamespace(),
-			"spec.nodeName":      pod.Spec.NodeName,
-		}
-		if !fs.Matches(fieldSet) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// Collect gathers pod metrics from the cluster (uses cache)
-func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, error) {
+// Process transforms a slice of pods into log entries.
+func (h *KubeletPodHandler) Process(pods []corev1.Pod) ([]any, error) {
 	var entries []any
-
-	// Get all pods from the cache
-	pods := utils.SafeGetStoreList(h.GetInformer())
 	listTime := time.Now()
 
-	for _, obj := range pods {
-		pod, ok := obj.(*corev1.Pod)
-		if !ok {
-			continue
-		}
-
-		if !utils.ShouldIncludeNamespace(namespaces, pod.Namespace) {
-			continue
-		}
-
-		if !h.MatchesPodSelectors(pod) {
-			continue
-		}
-
-		entry := h.createLogEntry(pod)
+	for i := range pods {
+		entry := h.createLogEntry(&pods[i])
 		entry.Timestamp = listTime
 		entries = append(entries, entry)
 	}
@@ -106,16 +35,14 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 	return entries, nil
 }
 
-// createLogEntry creates a PodData from a pod
-func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
-	// Determine QoS class
+// createLogEntry creates a PodData from a pod.
+// This mirrors PodHandler.createLogEntry to produce identical output.
+func (h *KubeletPodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 	qosClass := string(pod.Status.QOSClass)
 	if qosClass == "" {
-		qosClass = "BestEffort" // Default QoS class when not set
-		// See: https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/#qos-classes
+		qosClass = "BestEffort"
 	}
 
-	// Get priority class
 	priorityClass := ""
 	if pod.Spec.PriorityClassName != "" {
 		priorityClass = pod.Spec.PriorityClassName
@@ -123,7 +50,6 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 
 	createdByKind, createdByName := utils.GetOwnerReferenceInfo(pod)
 
-	// Check conditions in a single loop
 	var conditionReady, conditionInitialized, conditionScheduled, conditionContainersReady *bool
 	conditions := make(map[string]*bool)
 
@@ -140,18 +66,15 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		case corev1.ContainersReady:
 			conditionContainersReady = val
 		default:
-			// Add unknown conditions to the map
 			conditions[string(condition.Type)] = val
 		}
 	}
 
-	// Calculate total restart count
 	var totalRestartCount int32
 	for _, container := range pod.Status.ContainerStatuses {
 		totalRestartCount += container.RestartCount
 	}
 
-	// Get timestamps
 	var deletionTimestamp, startTime, initializedTime, readyTime, scheduledTime *time.Time
 	if pod.DeletionTimestamp != nil {
 		deletionTimestamp = &pod.DeletionTimestamp.Time
@@ -160,7 +83,6 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		startTime = &pod.Status.StartTime.Time
 	}
 
-	// Get condition timestamps
 	for _, condition := range pod.Status.Conditions {
 		switch condition.Type {
 		case corev1.PodInitialized:
@@ -178,20 +100,16 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		}
 	}
 
-	// Get status reason - match kube-state-metrics logic
-	// See: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
 	statusReason := ""
 	if pod.Status.Reason != "" {
 		statusReason = pod.Status.Reason
 	} else {
-		// Check conditions for reason
 		for _, condition := range pod.Status.Conditions {
 			if condition.Status == corev1.ConditionFalse && condition.Reason != "" {
 				statusReason = condition.Reason
 				break
 			}
 		}
-		// Check container statuses for terminated reasons
 		if statusReason == "" {
 			for _, cs := range pod.Status.ContainerStatuses {
 				if cs.State.Terminated != nil && cs.State.Terminated.Reason != "" {
@@ -202,7 +120,6 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		}
 	}
 
-	// Get unschedulable status
 	var unschedulable *bool
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
@@ -212,7 +129,6 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		}
 	}
 
-	// Get pod IPs
 	var podIPs []string
 	if pod.Status.PodIP != "" {
 		podIPs = append(podIPs, pod.Status.PodIP)
@@ -223,7 +139,6 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		}
 	}
 
-	// Get tolerations
 	var tolerations []types.TolerationData
 	for _, toleration := range pod.Spec.Tolerations {
 		tolerationData := types.TolerationData{
@@ -232,16 +147,12 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 			Effect:   string(toleration.Effect),
 			Operator: string(toleration.Operator),
 		}
-
-		// Add toleration seconds if present
 		if toleration.TolerationSeconds != nil {
 			tolerationData.TolerationSeconds = strconv.FormatInt(*toleration.TolerationSeconds, 10)
 		}
-
 		tolerations = append(tolerations, tolerationData)
 	}
 
-	// Get PVC info
 	var pvcs []types.PVCData
 	for _, volume := range pod.Spec.Volumes {
 		if volume.PersistentVolumeClaim != nil {
@@ -269,7 +180,6 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		}
 	}
 
-	// Get overhead
 	overheadCPUCores := ""
 	overheadMemoryBytes := ""
 	if pod.Spec.Overhead != nil {
@@ -281,16 +191,13 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		}
 	}
 
-	// Get runtime class name
 	runtimeClassName := ""
 	if pod.Spec.RuntimeClassName != nil {
 		runtimeClassName = *pod.Spec.RuntimeClassName
 	}
 
-	// Get completion time (when pod phase is Succeeded)
 	var completionTime *time.Time
 	if pod.Status.Phase == corev1.PodSucceeded {
-		// For succeeded pods, look for the latest container termination time
 		for _, container := range pod.Status.ContainerStatuses {
 			if container.State.Terminated != nil && !container.State.Terminated.FinishedAt.IsZero() {
 				if completionTime == nil || container.State.Terminated.FinishedAt.Time.After(*completionTime) {
@@ -298,7 +205,6 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 				}
 			}
 		}
-		// If no container termination time found, use current time as fallback
 		if completionTime == nil {
 			now := time.Now()
 			completionTime = &now
@@ -371,77 +277,4 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 	}
 
 	return data
-}
-
-// aggregateContainerResources calculates total pod resources using Kubernetes scheduler logic:
-// - Init containers: max resource (they run sequentially)
-// - Regular containers: sum resources (they run in parallel)
-func aggregateContainerResources(pod *corev1.Pod) containerResourceAggregation {
-	result := containerResourceAggregation{
-		ContainerCount:     int32(len(pod.Spec.Containers)),
-		InitContainerCount: int32(len(pod.Spec.InitContainers)),
-	}
-
-	var maxInitCPU, maxInitMemory, maxInitCPULimit, maxInitMemoryLimit int64
-	for _, container := range pod.Spec.InitContainers {
-		if cpu := utils.ExtractCPUMillicores(container.Resources.Requests); cpu != nil && *cpu > maxInitCPU {
-			maxInitCPU = *cpu
-		}
-		if memory := utils.ExtractMemoryBytes(container.Resources.Requests); memory != nil && *memory > maxInitMemory {
-			maxInitMemory = *memory
-		}
-		if cpu := utils.ExtractCPUMillicores(container.Resources.Limits); cpu != nil && *cpu > maxInitCPULimit {
-			maxInitCPULimit = *cpu
-		}
-		if memory := utils.ExtractMemoryBytes(container.Resources.Limits); memory != nil && *memory > maxInitMemoryLimit {
-			maxInitMemoryLimit = *memory
-		}
-	}
-
-	var sumRegularCPU, sumRegularMemory, sumRegularCPULimit, sumRegularMemoryLimit int64
-	for _, container := range pod.Spec.Containers {
-		if cpu := utils.ExtractCPUMillicores(container.Resources.Requests); cpu != nil {
-			sumRegularCPU += *cpu
-		}
-		if memory := utils.ExtractMemoryBytes(container.Resources.Requests); memory != nil {
-			sumRegularMemory += *memory
-		}
-		if cpu := utils.ExtractCPUMillicores(container.Resources.Limits); cpu != nil {
-			sumRegularCPULimit += *cpu
-		}
-		if memory := utils.ExtractMemoryBytes(container.Resources.Limits); memory != nil {
-			sumRegularMemoryLimit += *memory
-		}
-	}
-
-	// Total is the max of (init container max, regular container sum)
-	// Following Kubernetes scheduler logic: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/#resources
-	// Only set if there are any containers (init or regular)
-	if result.ContainerCount > 0 || result.InitContainerCount > 0 {
-		if maxInitCPU > sumRegularCPU {
-			result.TotalRequestsCPUMillicore = &maxInitCPU
-		} else {
-			result.TotalRequestsCPUMillicore = &sumRegularCPU
-		}
-
-		if maxInitMemory > sumRegularMemory {
-			result.TotalRequestsMemoryBytes = &maxInitMemory
-		} else {
-			result.TotalRequestsMemoryBytes = &sumRegularMemory
-		}
-
-		if maxInitCPULimit > sumRegularCPULimit {
-			result.TotalLimitsCPUMillicore = &maxInitCPULimit
-		} else {
-			result.TotalLimitsCPUMillicore = &sumRegularCPULimit
-		}
-
-		if maxInitMemoryLimit > sumRegularMemoryLimit {
-			result.TotalLimitsMemoryBytes = &maxInitMemoryLimit
-		} else {
-			result.TotalLimitsMemoryBytes = &sumRegularMemoryLimit
-		}
-	}
-
-	return result
 }

@@ -68,3 +68,21 @@ tolerations: []
 #       data:
 #         my-key: my-value
 extraResources: []
+
+# DaemonSet mode: deploy per-node pods that collect pod and container data
+# from the local kubelet API instead of the Kubernetes API server.
+# When enabled, the Deployment automatically excludes container resources and
+# limits pod collection to unscheduled pods only (via a spec.nodeName= field
+# selector). The DaemonSet handles scheduled pods and containers per node.
+# Node and all other resources remain on the Deployment.
+daemonSet:
+  enabled: false
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  tolerations: []
+  nodeSelector: {}
