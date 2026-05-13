@@ -179,6 +179,7 @@ func TestContainerHandler_createLogEntry(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	handler := NewContainerHandler(client, nil, []string{})
 	container := createTestContainer("app", "nginx:latest", true)
+	container.ImagePullPolicy = corev1.PullIfNotPresent
 	pod := createTestPodWithContainers("test-pod", "default", []corev1.Container{*container})
 	entry := handler.createLogEntry(pod, &pod.Status.ContainerStatuses[0], false)
 
@@ -188,6 +189,10 @@ func TestContainerHandler_createLogEntry(t *testing.T) {
 
 	if entry.Image != "nginx:latest" {
 		t.Errorf("Expected image 'nginx:latest', got '%s'", entry.Image)
+	}
+
+	if entry.ImagePullPolicy != string(corev1.PullIfNotPresent) {
+		t.Errorf("Expected image pull policy '%s', got '%s'", corev1.PullIfNotPresent, entry.ImagePullPolicy)
 	}
 
 	if entry.PodName != "test-pod" {
@@ -955,7 +960,9 @@ func TestContainerHandler_ContainerID_InitContainer(t *testing.T) {
 
 	// Create test init and regular containers
 	initContainer := createTestContainer("init", "busybox:latest", true)
+	initContainer.ImagePullPolicy = corev1.PullAlways
 	regularContainer := createTestContainer("app", "nginx:latest", true)
+	regularContainer.ImagePullPolicy = corev1.PullIfNotPresent
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1005,11 +1012,17 @@ func TestContainerHandler_ContainerID_InitContainer(t *testing.T) {
 	if initEntry.ContainerID != "docker://init123456" {
 		t.Errorf("Expected init container ID 'docker://init123456', got '%s'", initEntry.ContainerID)
 	}
+	if initEntry.ImagePullPolicy != string(corev1.PullAlways) {
+		t.Errorf("Expected init image pull policy '%s', got '%s'", corev1.PullAlways, initEntry.ImagePullPolicy)
+	}
 
 	// Test regular container ContainerID
 	regularEntry := handler.createLogEntry(pod, &pod.Status.ContainerStatuses[0], false)
 	if regularEntry.ContainerID != "docker://app789012" {
 		t.Errorf("Expected regular container ID 'docker://app789012', got '%s'", regularEntry.ContainerID)
+	}
+	if regularEntry.ImagePullPolicy != string(corev1.PullIfNotPresent) {
+		t.Errorf("Expected regular image pull policy '%s', got '%s'", corev1.PullIfNotPresent, regularEntry.ImagePullPolicy)
 	}
 }
 

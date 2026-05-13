@@ -274,12 +274,14 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 	}
 
 	// Extract resource requests and limits from pod spec
+	var imagePullPolicy string
 	var resourceRequests, resourceLimits map[string]string
 	var requestsCPUMillicore, requestsMemoryBytes, limitsCPUMillicore, limitsMemoryBytes *int64
 	if isInitContainer {
 		// Look in init containers for init container resources
 		for _, containerSpec := range pod.Spec.InitContainers {
 			if containerSpec.Name == container.Name {
+				imagePullPolicy = string(containerSpec.ImagePullPolicy)
 				resourceRequests = utils.ExtractResourceMapExcludingCPUMemory(containerSpec.Resources.Requests)
 				resourceLimits = utils.ExtractResourceMapExcludingCPUMemory(containerSpec.Resources.Limits)
 				requestsCPUMillicore = utils.ExtractCPUMillicores(containerSpec.Resources.Requests)
@@ -293,6 +295,7 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 		// Look in regular containers for regular container resources
 		for _, containerSpec := range pod.Spec.Containers {
 			if containerSpec.Name == container.Name {
+				imagePullPolicy = string(containerSpec.ImagePullPolicy)
 				resourceRequests = utils.ExtractResourceMapExcludingCPUMemory(containerSpec.Resources.Requests)
 				resourceLimits = utils.ExtractResourceMapExcludingCPUMemory(containerSpec.Resources.Limits)
 				requestsCPUMillicore = utils.ExtractCPUMillicores(containerSpec.Resources.Requests)
@@ -354,6 +357,7 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 			Namespace: pod.Namespace,
 		},
 		Image:                   container.Image,
+		ImagePullPolicy:         imagePullPolicy,
 		ImageID:                 container.ImageID,
 		ContainerID:             container.ContainerID,
 		PodName:                 pod.Name,

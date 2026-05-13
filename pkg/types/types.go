@@ -166,12 +166,13 @@ type PVCData struct {
 type ContainerData struct {
 	NamespacedMetadata
 	// Basic container info
-	Image       string `json:"Image"`
-	ImageID     string `json:"ImageID"`
-	ContainerID string `json:"ContainerID"`
-	PodName     string `json:"PodName"`
-	PodUID      string `json:"PodUID"`
-	NodeName    string `json:"NodeName"`
+	Image           string `json:"Image"`
+	ImagePullPolicy string `json:"ImagePullPolicy"`
+	ImageID         string `json:"ImageID"`
+	ContainerID     string `json:"ContainerID"`
+	PodName         string `json:"PodName"`
+	PodUID          string `json:"PodUID"`
+	NodeName        string `json:"NodeName"`
 
 	// Container state
 	Ready        *bool  `json:"Ready"`
