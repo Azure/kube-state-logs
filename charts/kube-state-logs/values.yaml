@@ -9,6 +9,8 @@ image:
   name: kube-state-logs
   # The tag of the image
   tag: latest
+  # The image pull policy
+  pullPolicy: IfNotPresent
   pullSecrets:
     name:
 
