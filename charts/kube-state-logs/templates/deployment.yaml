@@ -47,7 +47,7 @@ spec:
             runAsNonRoot: true
             runAsUser: 1000
           image: "{{ .Values.image.registry }}/{{ .Values.image.org }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/kube-state-logs"]
           args:
             - --log-interval={{ .Values.config.logInterval }}
