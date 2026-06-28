@@ -51,9 +51,24 @@ spec:
           command: ["/kube-state-logs"]
           args:
             - --log-interval={{ .Values.config.logInterval }}
+            {{- if .Values.daemonSet.enabled }}
+            {{- $filtered := list }}
+            {{- range .Values.config.resources }}
+            {{- if ne . "container" }}
+            {{- $filtered = append $filtered . }}
+            {{- end }}
+            {{- end }}
+            - --resources={{ $filtered | join "," }}
+            {{- $rcList := list (printf "pod:%s:fields=spec.nodeName=" .Values.config.logInterval) }}
+            {{- range .Values.config.resourceConfigs }}
+            {{- $rcList = append $rcList . }}
+            {{- end }}
+            - --resource-configs={{ $rcList | join "," }}
+            {{- else }}
             - --resources={{ .Values.config.resources | join "," }}
             {{- if .Values.config.resourceConfigs }}
             - --resource-configs={{ .Values.config.resourceConfigs | join "," }}
+            {{- end }}
             {{- end }}
             {{- if .Values.config.crdConfigs }}
             {{- $crdArgs := list }}

@@ -66,6 +66,37 @@ We welcome contributions to add support for other log collection solutions (e.g.
 
 kube-state-logs watches Kubernetes resources and logs their current state as JSON at the configured interval. Each resource type gets one log line per object, per interval.
 
+## Deployment Modes
+
+kube-state-logs supports two deployment modes. You can use the default single-replica Deployment, or opt in to an additional DaemonSet that offloads pod and container collection to each node.
+
+### Default: Single Deployment
+
+A single-replica Deployment watches the Kubernetes API server for all configured resources. Pod and container CPU/memory usage comes from the metrics-server API. This is the simplest setup and works well for most clusters.
+
+### Optional: Deployment + DaemonSet
+
+At large scale, the Kubernetes API server can become a bottleneck for pod and container watches. Enabling the DaemonSet mode adds a per-node DaemonSet that collects pod and container data directly from the local kubelet API, eliminating API server load for these high-cardinality resources. The single-replica Deployment continues handling all other resource types (deployments, nodes, services, etc.).
+
+**Choose DaemonSet mode when:**
+- Your cluster has hundreds or thousands of nodes
+- You want to reduce Kubernetes API server load from pod/container watches
+- You want pod/container CPU and memory usage sourced directly from the node (kubelet `/stats/summary`) rather than metrics-server
+
+**Stick with the default when:**
+- Your cluster is small to medium sized
+- Simplicity is preferred over reducing API server load
+- You depend on metrics-server for other purposes and don't mind the shared dependency
+
+Enable DaemonSet mode in your Helm values:
+
+```yaml
+daemonSet:
+  enabled: true
+```
+
+When enabled, the DaemonSet pods use `hostNetwork` to reach the local kubelet at `localhost:10250` and authenticate with the pod's service account token. The Deployment automatically excludes `container` from its resource list and switches to logging only unscheduled pods (those not yet assigned to a node), while the DaemonSet handles all scheduled pod and container data. This ensures pods are visible during their entire lifecycle — from pending/unscheduled through running and termination.
+
 ## Example Output
 
 A deployment logged as JSON (truncated for brevity):

@@ -116,4 +116,21 @@ Generate log-keys annotation from resources list
 {{- end -}}
 {{- end -}}
 {{- $annotation -}}
-{{- end }} 
+{{- end }}
+
+{{/*
+DaemonSet selector labels
+*/}}
+{{- define "kube-state-logs.daemonSetSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "kube-state-logs.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: daemonset
+{{- end }}
+
+{{/*
+Generate log-keys annotation for DaemonSet (pod + container only)
+*/}}
+{{- define "kube-state-logs.daemonSetLogKeysAnnotation" -}}
+{{- $adxMonDestination := .Values.config.adxMonLogDestination -}}
+ResourceType:pod:{{ $adxMonDestination }}:KubePodSnapshot,ResourceType:container:{{ $adxMonDestination }}:KubeContainerSnapshot,ResourceType:init_container:{{ $adxMonDestination }}:KubeContainerSnapshot
+{{- end }}

@@ -1,0 +1,84 @@
+{{- if .Values.daemonSet.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-state-logs-daemonset
+  labels:
+    {{- include "kube-state-logs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: daemonset
+spec:
+  selector:
+    matchLabels:
+      {{- include "kube-state-logs.daemonSetSelectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: "10%"
+  template:
+    metadata:
+      labels:
+        {{- include "kube-state-logs.daemonSetSelectorLabels" . | nindent 8 }}
+      {{- if .Values.config.enableADXMonAnnotations }}
+      annotations:
+        {{ .Values.config.adxMonLogKeysAnnotationKey }}: "{{ include "kube-state-logs.daemonSetLogKeysAnnotation" . }}"
+        adx-mon/scrape: "true"
+        adx-mon/log-parsers: "json"
+        adx-mon/log-destination: "{{ .Values.config.adxMonLogDestination }}:KubeStateLogs"
+      {{- end }}
+    spec:
+      {{- if .Values.image.pullSecrets.name }}
+      imagePullSecrets:
+      - name: "{{ .Values.image.pullSecrets.name }}"
+      {{- end }}
+      serviceAccountName: kube-state-logs-daemonset
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: kube-state-logs
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "{{ .Values.image.registry }}/{{ .Values.image.org }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+          command: ["/kube-state-logs"]
+          args:
+            - --mode=daemonset
+            - --node-name=$(NODE_NAME)
+            - --log-interval={{ .Values.config.logInterval }}
+            - --log-level={{ .Values.config.logLevel }}
+            {{- if .Values.config.containerEnvVars }}
+            - --container-envvars={{ .Values.config.containerEnvVars | join "," }}
+            {{- end }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            {{- if .Values.env }}
+            {{- toYaml .Values.env | nindent 12 }}
+            {{- end }}
+          resources:
+            limits:
+              cpu: {{ .Values.daemonSet.resources.limits.cpu }}
+              memory: {{ .Values.daemonSet.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.daemonSet.resources.requests.cpu }}
+              memory: {{ .Values.daemonSet.resources.requests.memory }}
+      {{- with .Values.daemonSet.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.daemonSet.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

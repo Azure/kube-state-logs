@@ -65,6 +65,11 @@ func (h *BaseHandler) SetSelectors(labelSelector labels.Selector, fieldSelector 
 	h.fieldSelector = fieldSelector
 }
 
+// GetSelectors returns the configured label and field selectors.
+func (h *BaseHandler) GetSelectors() (labels.Selector, fields.Selector) {
+	return h.labelSelector, h.fieldSelector
+}
+
 // MatchesSelectors checks whether the object matches the configured selectors.
 func (h *BaseHandler) MatchesSelectors(obj metav1.Object) bool {
 	if obj == nil {

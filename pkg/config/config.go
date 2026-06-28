@@ -41,6 +41,13 @@ type Config struct {
 	ContainerEnvVars []string
 	// ConfigMapIncludeValues controls whether ConfigMap data values are logged.
 	ConfigMapIncludeValues bool
+	// Mode specifies the operational mode: "deployment" (default) or "daemonset".
+	// In daemonset mode, the collector uses the local kubelet API instead of the Kubernetes API server.
+	Mode string
+	// NodeName is the name of the node this instance is running on (required in daemonset mode).
+	NodeName string
+	// KubeletURL is the base URL for the kubelet API (default: https://localhost:10250).
+	KubeletURL string
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types
@@ -290,6 +297,24 @@ func SetLogLevel(level string) error {
 
 // Validate checks the configuration for potential issues and fixes them
 func (c *Config) Validate() error {
+	// Validate Mode
+	if c.Mode == "" {
+		c.Mode = "deployment"
+	}
+	if c.Mode != "deployment" && c.Mode != "daemonset" {
+		return fmt.Errorf("invalid mode %q: must be 'deployment' or 'daemonset'", c.Mode)
+	}
+
+	// Validate daemonset mode requirements
+	if c.Mode == "daemonset" {
+		if c.NodeName == "" {
+			return fmt.Errorf("node-name is required in daemonset mode (set NODE_NAME environment variable)")
+		}
+		if c.KubeletURL == "" {
+			c.KubeletURL = "https://localhost:10250"
+		}
+	}
+
 	// Validate LogInterval
 	if c.LogInterval <= 0 {
 		klog.Warningf("Invalid LogInterval %v, setting to default 1 minute", c.LogInterval)
