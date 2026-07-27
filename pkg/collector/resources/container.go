@@ -33,24 +33,26 @@ const (
 // ContainerHandler handles collection of container metrics
 type ContainerHandler struct {
 	utils.BaseHandler
-	stateCache    cache.ThreadSafeStore
-	metricsCache  cache.ThreadSafeStore
-	metricsClient metricsclientset.Interface
-	envVarFilter  map[string]struct{}
+	stateCache        cache.ThreadSafeStore
+	metricsCache      cache.ThreadSafeStore
+	metricsClient     metricsclientset.Interface
+	envVarFilter      map[string]struct{}
+	nodeLabelPromoter nodeLabelPromoter
 }
 
 // NewContainerHandler creates a new ContainerHandler
-func NewContainerHandler(client kubernetes.Interface, metricsClient metricsclientset.Interface, envVars []string) *ContainerHandler {
+func NewContainerHandler(client kubernetes.Interface, metricsClient metricsclientset.Interface, envVars []string, promotedNodeLabels ...string) *ContainerHandler {
 	filter := make(map[string]struct{})
 	for _, v := range envVars {
 		filter[v] = struct{}{}
 	}
 	return &ContainerHandler{
-		BaseHandler:   utils.NewBaseHandler(client),
-		stateCache:    cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
-		metricsCache:  cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
-		metricsClient: metricsClient,
-		envVarFilter:  filter,
+		BaseHandler:       utils.NewBaseHandler(client),
+		stateCache:        cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
+		metricsCache:      cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
+		metricsClient:     metricsClient,
+		envVarFilter:      filter,
+		nodeLabelPromoter: newNodeLabelPromoter(promotedNodeLabels),
 	}
 }
 
@@ -59,6 +61,7 @@ func (h *ContainerHandler) SetupInformer(factory informers.SharedInformerFactory
 	// Create pod informer (containers are accessed through pods)
 	informer := factory.Core().V1().Pods().Informer()
 	h.SetupBaseInformer(informer, logger)
+	h.nodeLabelPromoter.setupInformer(factory)
 	return nil
 }
 
@@ -219,8 +222,10 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 				},
 				Namespace: pod.Namespace,
 			},
-			PodName: pod.Name,
-			State:   ContainerStateUnknown,
+			PodName:    pod.Name,
+			NodeName:   pod.Spec.NodeName,
+			NodeLabels: h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName),
+			State:      ContainerStateUnknown,
 		}
 	}
 
@@ -363,6 +368,7 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 		PodName:                 pod.Name,
 		PodUID:                  string(pod.UID),
 		NodeName:                pod.Spec.NodeName,
+		NodeLabels:              h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName),
 		Ready:                   &container.Ready,
 		RestartCount:            container.RestartCount,
 		State:                   state,

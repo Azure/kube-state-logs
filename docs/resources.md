@@ -132,6 +132,23 @@ config:
     - "node:5m"            # Log nodes every 5 minutes
 ```
 
+### Promoting Node Labels
+
+Selected node labels can be added to pod and container snapshots:
+
+```yaml
+config:
+  resources:
+    - node
+    - pod
+    - container
+  resourceConfigs:
+    - "pod:promote-node-labels=topology.kubernetes.io/zone|kubernetes.io/arch"
+    - "container:promote-node-labels=topology.kubernetes.io/zone|kubernetes.io/arch"
+```
+
+The configured labels are emitted in the `NodeLabels` object. Pod and container configurations are independent, and the interval may be omitted as shown above. Promotion is disabled unless `node` and the corresponding `pod` or `container` resource are both enabled. Labels that are not present on a pod's assigned node are omitted.
+
 ### Custom Resource Configuration
 
 Monitor CRDs by specifying their API version, resource name, and fields to capture:

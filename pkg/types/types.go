@@ -96,14 +96,15 @@ type DeploymentData struct {
 type PodData struct {
 	ControllerCreatedResourceMetadata
 	// Basic pod info
-	PodUID        string `json:"PodUID"`
-	NodeName      string `json:"NodeName"`
-	HostIP        string `json:"HostIP"`
-	PodIP         string `json:"PodIP"`
-	Phase         string `json:"Phase"`
-	QoSClass      string `json:"QoSClass"`
-	Priority      *int32 `json:"Priority"`
-	PriorityClass string `json:"PriorityClass"`
+	PodUID        string            `json:"PodUID"`
+	NodeName      string            `json:"NodeName"`
+	NodeLabels    map[string]string `json:"NodeLabels,omitempty"`
+	HostIP        string            `json:"HostIP"`
+	PodIP         string            `json:"PodIP"`
+	Phase         string            `json:"Phase"`
+	QoSClass      string            `json:"QoSClass"`
+	Priority      *int32            `json:"Priority"`
+	PriorityClass string            `json:"PriorityClass"`
 
 	// Pod conditions
 	Ready           *bool `json:"Ready"`
@@ -166,13 +167,14 @@ type PVCData struct {
 type ContainerData struct {
 	NamespacedMetadata
 	// Basic container info
-	Image           string `json:"Image"`
-	ImagePullPolicy string `json:"ImagePullPolicy"`
-	ImageID         string `json:"ImageID"`
-	ContainerID     string `json:"ContainerID"`
-	PodName         string `json:"PodName"`
-	PodUID          string `json:"PodUID"`
-	NodeName        string `json:"NodeName"`
+	Image           string            `json:"Image"`
+	ImagePullPolicy string            `json:"ImagePullPolicy"`
+	ImageID         string            `json:"ImageID"`
+	ContainerID     string            `json:"ContainerID"`
+	PodName         string            `json:"PodName"`
+	PodUID          string            `json:"PodUID"`
+	NodeName        string            `json:"NodeName"`
+	NodeLabels      map[string]string `json:"NodeLabels,omitempty"`
 
 	// Container state
 	Ready        *bool  `json:"Ready"`

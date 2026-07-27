@@ -195,6 +195,45 @@ func TestPodHandler_Collect(t *testing.T) {
 	}
 }
 
+func TestPodHandler_PromotesSelectedNodeLabels(t *testing.T) {
+	pod := createTestPod("test-pod", "default", corev1.PodRunning)
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node",
+			Labels: map[string]string{
+				"topology.kubernetes.io/zone": "westus2-1",
+				"kubernetes.io/arch":          "amd64",
+			},
+		},
+	}
+	client := fake.NewSimpleClientset(pod, node)
+	handler := NewPodHandler(client, "topology.kubernetes.io/zone")
+	factory := informers.NewSharedInformerFactory(client, time.Hour)
+	logger := &testutils.MockLogger{}
+
+	if err := handler.SetupInformer(factory, logger, time.Hour); err != nil {
+		t.Fatalf("Failed to setup informer: %v", err)
+	}
+	factory.Start(nil)
+	factory.WaitForCacheSync(nil)
+
+	entries, err := handler.Collect(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(entries))
+	}
+
+	entry := entries[0].(types.PodData)
+	if got := entry.NodeLabels["topology.kubernetes.io/zone"]; got != "westus2-1" {
+		t.Errorf("Expected promoted zone label, got %q", got)
+	}
+	if _, exists := entry.NodeLabels["kubernetes.io/arch"]; exists {
+		t.Error("Expected unconfigured architecture label to be excluded")
+	}
+}
+
 func TestPodHandler_Collect_EmptyCache(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	handler := NewPodHandler(client)

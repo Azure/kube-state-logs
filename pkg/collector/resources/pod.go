@@ -20,6 +20,7 @@ import (
 // PodHandler handles collection of pod metrics
 type PodHandler struct {
 	utils.BaseHandler
+	nodeLabelPromoter nodeLabelPromoter
 }
 
 // containerResourceAggregation holds aggregated resource values for a pod's containers
@@ -33,9 +34,10 @@ type containerResourceAggregation struct {
 }
 
 // NewPodHandler creates a new PodHandler
-func NewPodHandler(client kubernetes.Interface) *PodHandler {
+func NewPodHandler(client kubernetes.Interface, promotedNodeLabels ...string) *PodHandler {
 	return &PodHandler{
-		BaseHandler: utils.NewBaseHandler(client),
+		BaseHandler:       utils.NewBaseHandler(client),
+		nodeLabelPromoter: newNodeLabelPromoter(promotedNodeLabels),
 	}
 }
 
@@ -44,6 +46,7 @@ func (h *PodHandler) SetupInformer(factory informers.SharedInformerFactory, logg
 	// Create pod informer
 	informer := factory.Core().V1().Pods().Informer()
 	h.SetupBaseInformer(informer, logger)
+	h.nodeLabelPromoter.setupInformer(factory)
 	return nil
 }
 
@@ -302,6 +305,7 @@ func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
 		},
 		PodUID:                    string(pod.UID),
 		NodeName:                  pod.Spec.NodeName,
+		NodeLabels:                h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName),
 		HostIP:                    pod.Status.HostIP,
 		PodIP:                     pod.Status.PodIP,
 		Phase:                     string(pod.Status.Phase),
