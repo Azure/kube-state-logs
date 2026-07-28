@@ -32,6 +32,11 @@ config:
   namespaces: ""
   logLevel: "info"
 
+  # Optional per-resource settings. The interval may be omitted to use logInterval.
+  # To promote node labels, configure pod and/or container and keep node enabled above.
+  # Example: ["pod:promote-node-labels=topology.kubernetes.io/zone|kubernetes.io/arch"]
+  resourceConfigs: []
+
   # Enable ADX-Mon annotations on the pods.
   enableADXMonAnnotations: false
   adxMonLogDestination: ""

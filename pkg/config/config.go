@@ -15,10 +15,11 @@ import (
 
 // ResourceConfig holds configuration for a specific resource type
 type ResourceConfig struct {
-	Name          string
-	Interval      time.Duration
-	LabelSelector labels.Selector
-	FieldSelector fields.Selector
+	Name                string
+	Interval            time.Duration
+	LabelSelector       labels.Selector
+	FieldSelector       fields.Selector
+	NodeLabelsToPromote []string
 }
 
 // CRDConfig holds configuration for a specific CRD
@@ -67,7 +68,7 @@ func ParseResourceList(resources string) []string {
 }
 
 // ParseResourceConfigs parses a comma-separated string of resource configs.
-// Format: "resource:interval[:labels=...][:fields=...]" (comma-separated list).
+// Format: "resource:interval[:labels=...][:fields=...][:promote-node-labels=...|...]" (comma-separated list).
 // Use "\\," to escape commas inside selectors.
 // Example: "configmap:1m:labels=app=foo\\,env=prod,pod:30s:fields=metadata.name=my-pod"
 func ParseResourceConfigs(resourceConfigs string, defaultInterval time.Duration) ([]ResourceConfig, error) {
@@ -100,6 +101,7 @@ func ParseResourceConfigs(resourceConfigs string, defaultInterval time.Duration)
 		labelSelector := labels.Everything()
 		fieldSelector := fields.Everything()
 		interval := defaultInterval
+		var nodeLabelsToPromote []string
 
 		intervalSet := false
 		for i := 1; i < len(parts); i++ {
@@ -128,6 +130,21 @@ func ParseResourceConfigs(resourceConfigs string, defaultInterval time.Duration)
 					return nil, fmt.Errorf("invalid field selector '%s' for resource '%s': %w", value, resourceName, err)
 				}
 				fieldSelector = parsed
+			case strings.HasPrefix(segment, "promote-node-labels="):
+				if resourceName != "pod" && resourceName != "container" {
+					return nil, fmt.Errorf("promote-node-labels is only supported for resource 'pod' or 'container', not '%s'", resourceName)
+				}
+				value := strings.TrimPrefix(segment, "promote-node-labels=")
+				if value == "" {
+					return nil, fmt.Errorf("promote-node-labels cannot be empty for resource '%s'", resourceName)
+				}
+				for _, labelName := range strings.Split(value, "|") {
+					labelName = strings.TrimSpace(labelName)
+					if labelName == "" {
+						return nil, fmt.Errorf("promote-node-labels contains an empty label for resource '%s'", resourceName)
+					}
+					nodeLabelsToPromote = append(nodeLabelsToPromote, labelName)
+				}
 			default:
 				if intervalSet {
 					return nil, fmt.Errorf("unexpected setting '%s' for resource '%s'", segment, resourceName)
@@ -142,10 +159,11 @@ func ParseResourceConfigs(resourceConfigs string, defaultInterval time.Duration)
 		}
 
 		configs = append(configs, ResourceConfig{
-			Name:          resourceName,
-			Interval:      interval,
-			LabelSelector: labelSelector,
-			FieldSelector: fieldSelector,
+			Name:                resourceName,
+			Interval:            interval,
+			LabelSelector:       labelSelector,
+			FieldSelector:       fieldSelector,
+			NodeLabelsToPromote: nodeLabelsToPromote,
 		})
 	}
 
@@ -264,6 +282,36 @@ func ParseContainerEnvVars(envvars string) []string {
 		}
 	}
 	return result
+}
+
+// PromotedNodeLabelsFor returns configured node labels only when node snapshots and the target snapshots are enabled.
+func (c *Config) PromotedNodeLabelsFor(resourceName string) []string {
+	if resourceName != "pod" && resourceName != "container" {
+		return nil
+	}
+
+	nodeConfigured := false
+	resourceConfigured := false
+	for _, configuredResource := range c.Resources {
+		switch configuredResource {
+		case "node":
+			nodeConfigured = true
+		case resourceName:
+			resourceConfigured = true
+		}
+	}
+	if !nodeConfigured || !resourceConfigured {
+		return nil
+	}
+
+	var nodeLabelsToPromote []string
+	for _, resourceConfig := range c.ResourceConfigs {
+		if resourceConfig.Name == resourceName {
+			nodeLabelsToPromote = resourceConfig.NodeLabelsToPromote
+		}
+	}
+
+	return nodeLabelsToPromote
 }
 
 // SetLogLevel sets the klog verbosity level

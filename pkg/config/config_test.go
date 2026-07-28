@@ -155,6 +155,107 @@ func TestParseContainerEnvVars(t *testing.T) {
 	}
 }
 
+func TestConfig_PromotedNodeLabelsFor(t *testing.T) {
+	labels := []string{"topology.kubernetes.io/zone"}
+	tests := []struct {
+		name            string
+		resources       []string
+		resourceConfigs []ResourceConfig
+		target          string
+		expectList      bool
+	}{
+		{name: "pod and node configured", resources: []string{"pod", "node"}, resourceConfigs: []ResourceConfig{{Name: "pod", NodeLabelsToPromote: labels}}, target: "pod", expectList: true},
+		{name: "container and node configured", resources: []string{"container", "node"}, resourceConfigs: []ResourceConfig{{Name: "container", NodeLabelsToPromote: labels}}, target: "container", expectList: true},
+		{name: "node missing", resources: []string{"pod"}, resourceConfigs: []ResourceConfig{{Name: "pod", NodeLabelsToPromote: labels}}, target: "pod"},
+		{name: "target missing", resources: []string{"node"}, resourceConfigs: []ResourceConfig{{Name: "container", NodeLabelsToPromote: labels}}, target: "container"},
+		{name: "target config missing", resources: []string{"pod", "node"}, target: "pod"},
+		{name: "pod config does not apply to container", resources: []string{"pod", "container", "node"}, resourceConfigs: []ResourceConfig{{Name: "pod", NodeLabelsToPromote: labels}}, target: "container"},
+		{name: "unsupported target", resources: []string{"service", "node"}, resourceConfigs: []ResourceConfig{{Name: "service", NodeLabelsToPromote: labels}}, target: "service"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{Resources: tt.resources, ResourceConfigs: tt.resourceConfigs}
+			actual := cfg.PromotedNodeLabelsFor(tt.target)
+			if tt.expectList && len(actual) != 1 {
+				t.Fatalf("Expected promoted node labels, got %v", actual)
+			}
+			if !tt.expectList && actual != nil {
+				t.Fatalf("Expected promotion to be disabled, got %v", actual)
+			}
+		})
+	}
+}
+
+func TestParseResourceConfigs_PromoteNodeLabels(t *testing.T) {
+	const defaultInterval = 5 * time.Minute
+	tests := []struct {
+		name             string
+		input            string
+		expectErr        bool
+		expectedInterval time.Duration
+		expectedLabels   []string
+	}{
+		{
+			name:             "pod labels without interval",
+			input:            "pod:promote-node-labels=topology.kubernetes.io/zone",
+			expectedInterval: defaultInterval,
+			expectedLabels:   []string{"topology.kubernetes.io/zone"},
+		},
+		{
+			name:             "container labels with interval",
+			input:            "container:30s:promote-node-labels=topology.kubernetes.io/zone|kubernetes.io/arch",
+			expectedInterval: 30 * time.Second,
+			expectedLabels:   []string{"topology.kubernetes.io/zone", "kubernetes.io/arch"},
+		},
+		{
+			name:      "unsupported resource",
+			input:     "node:promote-node-labels=topology.kubernetes.io/zone",
+			expectErr: true,
+		},
+		{
+			name:      "empty list",
+			input:     "pod:promote-node-labels=",
+			expectErr: true,
+		},
+		{
+			name:      "empty label",
+			input:     "container:promote-node-labels=topology.kubernetes.io/zone||kubernetes.io/arch",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configs, err := ParseResourceConfigs(tt.input, defaultInterval)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatal("Expected an error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if len(configs) != 1 {
+				t.Fatalf("Expected 1 config, got %d", len(configs))
+			}
+			if configs[0].Interval != tt.expectedInterval {
+				t.Fatalf("Expected interval %v, got %v", tt.expectedInterval, configs[0].Interval)
+			}
+			actual := configs[0].NodeLabelsToPromote
+			if len(actual) != len(tt.expectedLabels) {
+				t.Fatalf("Expected labels %v, got %v", tt.expectedLabels, actual)
+			}
+			for i := range actual {
+				if actual[i] != tt.expectedLabels[i] {
+					t.Fatalf("Expected labels %v, got %v", tt.expectedLabels, actual)
+				}
+			}
+		})
+	}
+}
+
 func TestParseResourceConfigs(t *testing.T) {
 	defaultInterval := 5 * time.Minute
 	tests := []struct {

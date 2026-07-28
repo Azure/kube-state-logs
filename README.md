@@ -41,8 +41,12 @@ config:
   logLevel: "info"              # debug, info, warn, error
   namespaces: ""                # Empty = all namespaces
   configmapIncludeValues: false # ConfigMap data values
+  resourceConfigs:              # Per-resource settings; interval is optional
+    - "pod:promote-node-labels=topology.kubernetes.io/zone"
+    - "container:promote-node-labels=topology.kubernetes.io/zone"
   resources:                    # Which resources to monitor
     - pod
+    - container
     - deployment
     - node
     - service

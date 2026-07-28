@@ -141,8 +141,8 @@ func New(cfg *config.Config) (*Collector, error) {
 func (c *Collector) registerHandlers() {
 	// Register resource handlers
 	handlers := map[string]interfaces.ResourceHandler{
-		"pod":                              resources.NewPodHandler(c.client),
-		"container":                        resources.NewContainerHandler(c.client, c.metricsClient, c.config.ContainerEnvVars),
+		"pod":                              resources.NewPodHandler(c.client, c.config.PromotedNodeLabelsFor("pod")...),
+		"container":                        resources.NewContainerHandler(c.client, c.metricsClient, c.config.ContainerEnvVars, c.config.PromotedNodeLabelsFor("container")...),
 		"service":                          resources.NewServiceHandler(c.client),
 		"node":                             resources.NewNodeHandler(c.client, c.metricsClient),
 		"deployment":                       resources.NewDeploymentHandler(c.client),
