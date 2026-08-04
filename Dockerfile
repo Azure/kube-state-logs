@@ -45,7 +45,7 @@ FROM source AS build
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/kube-state-logs .
 
 # Runtime stage
-FROM mcr.microsoft.com/azurelinux/distroless/minimal:3.0
+FROM mcr.microsoft.com/azurelinux/distroless/base:3.0
 
 COPY --from=build /out/kube-state-logs /kube-state-logs
 
