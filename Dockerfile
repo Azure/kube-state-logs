@@ -2,11 +2,11 @@
 FROM mcr.microsoft.com/azurelinux/base/core:3.0 AS source
 
 ARG TARGETARCH
-ARG GO_VERSION=1.26.4
+ARG GO_VERSION=1.26.5
 
 # SHA256 Checksums can be found on the releases pages at https://github.com/microsoft/go/blob/microsoft/main/eng/doc/Downloads.md
-ARG GO_SHA256SUM_AMD64=fe7d72e1e83e15633d0a99bd67ce5ffbb67d8a5f71dcea309ff274457ef3c927
-ARG GO_SHA256SUM_ARM64=9c1c8660dd3cec69415c476232ffb32d529e158d2b2deca4038804f1766f2f78
+ARG GO_SHA256SUM_AMD64=df9f45167cf1cd825aa8555b76c5b24cb89dfbd771f48cc0007458236c414715
+ARG GO_SHA256SUM_ARM64=9990f8fcfefcbd15fb888dd777c7a72f1745889c9e94836ffe26f7e46e43328d
 
 ENV GOROOT=/usr/local/go
 ENV GOBIN=/usr/local/go/bin
