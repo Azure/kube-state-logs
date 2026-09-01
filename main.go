@@ -21,7 +21,7 @@ func main() {
 	// Parse command line flags
 	var (
 		logInterval          = flag.Duration("log-interval", 1*time.Minute, "Default interval between log outputs")
-		resources            = flag.String("resources", "pod,container,service,node,deployment,job,cronjob,configmap,secret,persistentvolumeclaim,ingress,horizontalpodautoscaler,serviceaccount,endpoints,persistentvolume,resourcequota,poddisruptionbudget,storageclass,networkpolicy,replicationcontroller,limitrange,lease,role,clusterrole,rolebinding,clusterrolebinding,volumeattachment,certificatesigningrequest,namespace,daemonset,statefulset,replicaset,mutatingwebhookconfiguration,validatingwebhookconfiguration,ingressclass,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding", "Comma-separated list of resources to monitor")
+		resources            = flag.String("resources", config.DefaultResourceList, "Comma-separated list of resources to monitor")
 		resourceConfigs      = flag.String("resource-configs", "", "Comma-separated list of resource configs: 'resource:interval[:labels=...][:fields=...][:promote-node-labels=label|label]'. Use '\\\\,' to escape commas in selectors (e.g., 'configmap:1m:labels=app=foo\\\\,env=prod'). If not specified, uses log-interval for all resources.")
 		crdConfigs           = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
 		namespaces           = flag.String("namespaces", "", "Comma-separated list of namespaces to monitor (empty for all)")
@@ -34,6 +34,7 @@ func main() {
 		useKubeletAPI        = flag.Bool("use-kubelet-api", false, "Use kubelet API instead of Kubernetes API for pod/container collection (requires --node and --node-ip)")
 		kubeletPort          = flag.Int("kubelet-port", 10250, "Port for the kubelet API")
 		nodeIP               = flag.String("node-ip", "", "IP address of the node for kubelet API access (required when --use-kubelet-api is set)")
+		kubeletInsecureTLS   = flag.Bool("kubelet-insecure-skip-verify", false, "Disable kubelet TLS certificate verification (use only on trusted cluster networks)")
 	)
 	flag.Parse()
 
@@ -63,19 +64,20 @@ func main() {
 
 	// Create configuration
 	cfg := &config.Config{
-		LogInterval:            *logInterval,
-		Resources:              config.ParseResourceList(*resources),
-		ResourceConfigs:        resourceConfigsList,
-		CRDs:                   config.ParseCRDConfigs(*crdConfigs),
-		Namespaces:             config.ParseNamespaceList(*namespaces),
-		Kubeconfig:             *kubeconfig,
-		ContainerEnvVars:       config.ParseContainerEnvVars(*containerEnvVars),
-		ConfigMapIncludeValues: *configMapValues,
-		Node:                   *node,
-		TrackUnscheduledPods:   *trackUnscheduledPods,
-		UseKubeletAPI:          *useKubeletAPI,
-		KubeletPort:            *kubeletPort,
-		NodeIP:                 *nodeIP,
+		LogInterval:               *logInterval,
+		Resources:                 config.ParseResourceList(*resources),
+		ResourceConfigs:           resourceConfigsList,
+		CRDs:                      config.ParseCRDConfigs(*crdConfigs),
+		Namespaces:                config.ParseNamespaceList(*namespaces),
+		Kubeconfig:                *kubeconfig,
+		ContainerEnvVars:          config.ParseContainerEnvVars(*containerEnvVars),
+		ConfigMapIncludeValues:    *configMapValues,
+		Node:                      *node,
+		TrackUnscheduledPods:      *trackUnscheduledPods,
+		UseKubeletAPI:             *useKubeletAPI,
+		KubeletPort:               *kubeletPort,
+		NodeIP:                    *nodeIP,
+		KubeletInsecureSkipVerify: *kubeletInsecureTLS,
 	}
 
 	// Validate configuration to prevent runtime issues

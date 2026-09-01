@@ -74,12 +74,19 @@ spec:
             - --log-interval={{ .Values.config.logInterval }}
             {{- if eq .Values.deploymentMode "advanced" }}
             - --resources={{ include "kube-state-logs.clusterResources" . }}
+            {{- $resources := .Values.config.resources | toStrings }}
+            {{- if or (has "pod" $resources) (has "all" $resources) }}
             - --track-unscheduled-pods
+            {{- end }}
+            {{- $clusterResourceConfigs := include "kube-state-logs.clusterResourceConfigs" . }}
+            {{- if $clusterResourceConfigs }}
+            - --resource-configs={{ $clusterResourceConfigs }}
+            {{- end }}
             {{- else }}
             - --resources={{ .Values.config.resources | join "," }}
-            {{- end }}
             {{- if .Values.config.resourceConfigs }}
             - --resource-configs={{ .Values.config.resourceConfigs | join "," }}
+            {{- end }}
             {{- end }}
             {{- if .Values.config.crdConfigs }}
             {{- $crdArgs := list }}

@@ -45,6 +45,7 @@ type Collector struct {
 	podFactory      informers.SharedInformerFactory // Separate factory for pods, may have node filtering
 	dynFactory      dynamicinformer.DynamicSharedInformerFactory
 	kubeletClient   *kubelet.Client // Kubelet API client (nil if not using kubelet mode)
+	kubeletSource   kubelet.SnapshotSource
 	stopCh          chan struct{}
 	wg              sync.WaitGroup
 }
@@ -112,12 +113,20 @@ func New(cfg *config.Config) (*Collector, error) {
 		kubeletClient, err = kubelet.NewClient(kubelet.ClientConfig{
 			NodeIP:             cfg.NodeIP,
 			Port:               cfg.KubeletPort,
-			InsecureSkipVerify: true, // Kubelet uses self-signed certs
+			InsecureSkipVerify: cfg.KubeletInsecureSkipVerify,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create kubelet client: %w", err)
 		}
+		if cfg.KubeletInsecureSkipVerify {
+			klog.Warning("Kubelet TLS certificate verification is disabled")
+		}
 		klog.Infof("Using kubelet API at %s:%d for pod/container collection", cfg.NodeIP, cfg.KubeletPort)
+	}
+
+	var kubeletSource kubelet.SnapshotSource
+	if kubeletClient != nil {
+		kubeletSource = kubelet.NewCachedSnapshotSource(kubeletClient, 250*time.Millisecond)
 	}
 
 	// Create collector
@@ -134,6 +143,7 @@ func New(cfg *config.Config) (*Collector, error) {
 		podFactory:      podFactory,
 		dynFactory:      dynFactory,
 		kubeletClient:   kubeletClient,
+		kubeletSource:   kubeletSource,
 		stopCh:          make(chan struct{}),
 	}
 
@@ -211,16 +221,43 @@ func (c *Collector) shouldUseKubeletHandler(resourceType string) bool {
 func (c *Collector) registerHandlers() {
 	// If using kubelet mode, register kubelet handlers for pod/container
 	if c.kubeletClient != nil {
-		c.kubeletHandlers["pod"] = resources.NewKubeletPodHandler(c.kubeletClient)
-		c.kubeletHandlers["container"] = resources.NewKubeletContainerHandler(c.kubeletClient, c.metricsClient, c.config.ContainerEnvVars)
+		c.kubeletHandlers["pod"] = resources.NewKubeletPodHandler(
+			c.kubeletSource,
+			c.client,
+			c.config.Node,
+			c.config.PromotedNodeLabelsFor("pod")...,
+		)
+		c.kubeletHandlers["container"] = resources.NewKubeletContainerHandler(
+			c.kubeletSource,
+			c.client,
+			c.config.Node,
+			c.config.ContainerEnvVars,
+			c.config.PromotedNodeLabelsFor("container")...,
+		)
 		klog.Info("Registered kubelet-based handlers for pod and container")
+	}
+
+	podPromotedNodeLabels := c.config.PromotedNodeLabelsFor("pod")
+	containerPromotedNodeLabels := c.config.PromotedNodeLabelsFor("container")
+	if c.config.TrackUnscheduledPods {
+		// Unscheduled pods have no node to promote labels from. More importantly,
+		// the pod factory's spec.nodeName selector must never be applied to a node
+		// informer created from that same factory.
+		podPromotedNodeLabels = nil
+		containerPromotedNodeLabels = nil
+	}
+	podHandler := resources.NewPodHandler(c.client, podPromotedNodeLabels...)
+	containerHandler := resources.NewContainerHandler(c.client, c.metricsClient, c.config.ContainerEnvVars, containerPromotedNodeLabels...)
+	if c.config.Node != "" {
+		podHandler.UseDirectNodeLabelLookup(c.client, c.config.Node)
+		containerHandler.UseDirectNodeLabelLookup(c.client, c.config.Node)
 	}
 
 	// Register resource handlers (informer-based)
 	// Note: pod and container handlers are still registered but won't be used in kubelet mode
 	handlers := map[string]interfaces.ResourceHandler{
-		"pod":                              resources.NewPodHandler(c.client, c.config.PromotedNodeLabelsFor("pod")...),
-		"container":                        resources.NewContainerHandler(c.client, c.metricsClient, c.config.ContainerEnvVars, c.config.PromotedNodeLabelsFor("container")...),
+		"pod":                              podHandler,
+		"container":                        containerHandler,
 		"service":                          resources.NewServiceHandler(c.client),
 		"node":                             resources.NewNodeHandler(c.client, c.metricsClient),
 		"deployment":                       resources.NewDeploymentHandler(c.client),
@@ -479,6 +516,13 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 				klog.Warningf("No kubelet handler found for resource type: %s", resourceName)
 				continue
 			}
+			if rc, ok := resourceConfigMap[resourceName]; ok {
+				if configurable, ok := kubeletHandler.(interface {
+					SetSelectors(labels.Selector, fields.Selector)
+				}); ok {
+					configurable.SetSelectors(rc.LabelSelector, rc.FieldSelector)
+				}
+			}
 
 			klog.Infof("Starting kubelet ticker for %s with interval %v", resourceName, interval)
 
@@ -637,38 +681,5 @@ func (c *Collector) collectAndLogCRD(ctx context.Context, handlerKey string, han
 	}
 
 	klog.V(2).Infof("Collected and logged %d CRD entries for %s", len(entries), handlerKey)
-	return nil
-}
-
-// collectAndLog collects data from all configured resources and logs them
-// This is now mainly used for initial collection or manual triggers
-func (c *Collector) collectAndLog(ctx context.Context) error {
-	var allEntries []any
-
-	// Collect from each configured resource type
-	for _, resourceType := range c.config.Resources {
-		handler, exists := c.handlers[resourceType]
-		if !exists {
-			klog.Warningf("No handler found for resource type: %s", resourceType)
-			continue
-		}
-
-		entries, err := handler.Collect(ctx, c.config.Namespaces)
-		if err != nil {
-			klog.Errorf("Failed to collect %s: %v", resourceType, err)
-			continue
-		}
-
-		allEntries = append(allEntries, entries...)
-	}
-
-	// Log all collected entries
-	for _, entry := range allEntries {
-		if err := c.logger.Log(entry); err != nil {
-			klog.Errorf("Failed to log entry: %v", err)
-		}
-	}
-
-	klog.V(2).Infof("Collected and logged %d entries", len(allEntries))
 	return nil
 }

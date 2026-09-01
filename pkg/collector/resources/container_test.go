@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -865,6 +866,28 @@ func TestContainerHandler_TerminatedContainerTimeFiltering(t *testing.T) {
 
 	if entry.PodName != "test-pod-recent" {
 		t.Errorf("Expected pod name 'test-pod-recent', got '%s'", entry.PodName)
+	}
+}
+
+func TestContainerHandler_StateCacheSeparatesRecreatedPods(t *testing.T) {
+	handler := NewContainerHandler(fake.NewSimpleClientset(), nil, nil)
+	finished := metav1.NewTime(time.Now())
+	terminatedPod := func(uid string) *corev1.Pod {
+		pod := createTestPodWithContainers("same-name", "default", []corev1.Container{{Name: "app"}})
+		pod.UID = k8stypes.UID(uid)
+		pod.Status.ContainerStatuses[0].State = corev1.ContainerState{
+			Terminated: &corev1.ContainerStateTerminated{FinishedAt: finished},
+		}
+		return pod
+	}
+
+	entries, err := handler.processPods(context.Background(), []any{terminatedPod("uid-1")}, nil)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("first pod: entries=%d err=%v", len(entries), err)
+	}
+	entries, err = handler.processPods(context.Background(), []any{terminatedPod("uid-2")}, nil)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("recreated pod: entries=%d err=%v", len(entries), err)
 	}
 }
 

@@ -13,6 +13,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// DefaultResourceList contains every built-in typed resource handler.
+const DefaultResourceList = "pod,container,service,node,deployment,job,cronjob,configmap,secret,persistentvolumeclaim,ingress,horizontalpodautoscaler,serviceaccount,endpoints,persistentvolume,resourcequota,poddisruptionbudget,storageclass,networkpolicy,replicationcontroller,limitrange,lease,role,clusterrole,rolebinding,clusterrolebinding,volumeattachment,certificatesigningrequest,namespace,daemonset,statefulset,replicaset,mutatingwebhookconfiguration,validatingwebhookconfiguration,ingressclass,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding"
+
+// AllResourceList also enables configured custom-resource handlers.
+const AllResourceList = DefaultResourceList + ",crd"
+
 // ResourceConfig holds configuration for a specific resource type
 type ResourceConfig struct {
 	Name                string
@@ -58,6 +64,10 @@ type Config struct {
 	// NodeIP is the IP address of the node for kubelet API access.
 	// Required when UseKubeletAPI is true.
 	NodeIP string
+	// KubeletInsecureSkipVerify disables kubelet TLS certificate verification.
+	// This may be required for self-signed serving certificates and should be
+	// enabled only in trusted cluster networks.
+	KubeletInsecureSkipVerify bool
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types
@@ -73,7 +83,7 @@ func ParseResourceList(resources string) []string {
 	for _, resource := range resourceList {
 		resource = strings.TrimSpace(resource)
 		if resource == "all" {
-			return []string{} // Return empty to use defaults
+			return ParseResourceList(AllResourceList)
 		}
 		if resource != "" {
 			result = append(result, resource)
@@ -316,7 +326,7 @@ func (c *Config) PromotedNodeLabelsFor(resourceName string) []string {
 			resourceConfigured = true
 		}
 	}
-	if !nodeConfigured || !resourceConfigured {
+	if !resourceConfigured || (!nodeConfigured && c.Node == "") {
 		return nil
 	}
 

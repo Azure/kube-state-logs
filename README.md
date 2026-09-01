@@ -57,6 +57,27 @@ deploymentMode: advanced
 
 **Separate RBAC:** Each component gets its own ServiceAccount and ClusterRole with minimal required permissions.
 
+By default, node collectors use node-filtered Kubernetes informers. To remove
+pod watches from the API server and source container usage directly from each
+node, enable kubelet polling:
+
+```yaml
+deploymentMode: advanced
+daemonset:
+  useKubeletAPI: true
+  kubeletPort: 10250
+  # Commonly needed for self-signed kubelet serving certificates. Disable this
+  # when the service-account CA can verify the certificate presented by kubelet.
+  kubeletInsecureSkipVerify: true
+```
+
+Kubelet mode reads `/pods` and `/stats/summary` with the DaemonSet pod's
+rotating service-account token. It does not query metrics-server. Because this
+is interval-based snapshot polling, a pod that starts and disappears entirely
+between two polls may not be observed; reduce `config.logInterval` when that
+tradeoff matters. Disabling TLS verification should be limited to trusted
+cluster networks.
+
 **Separate resource limits:** DaemonSet pods use smaller defaults since they only track local pods:
 
 ```yaml
