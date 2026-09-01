@@ -147,7 +147,7 @@ config:
     - "container:promote-node-labels=topology.kubernetes.io/zone|kubernetes.io/arch"
 ```
 
-The configured labels are emitted in the `NodeLabels` object. Pod and container configurations are independent, and the interval may be omitted as shown above. Promotion is disabled unless `node` and the corresponding `pod` or `container` resource are both enabled. Labels that are not present on a pod's assigned node are omitted.
+The configured labels are emitted in the `NodeLabels` object. Pod and container configurations are independent, and the interval may be omitted as shown above. In simple mode, promotion requires both `node` and the corresponding `pod` or `container` resource. In advanced mode, each node collector retrieves only its own node, so a cluster-wide `node` snapshot is not required. Unscheduled pods have no assigned node and therefore no promoted labels. Labels absent from the assigned node are omitted.
 
 ### Custom Resource Configuration
 
@@ -177,6 +177,19 @@ config:
     - "GOMAXPROCS"
     - "MY_APP_VERSION"
 ```
+
+### Pod and Container Node Filtering
+
+In [advanced deployment mode](../README.md#deployment-modes), `pod` and `container` resources support node-based filtering. The DaemonSet pods use the `--node` flag to filter pods to only those scheduled on the local node. The Deployment uses `--track-unscheduled-pods` to capture pods not yet assigned to a node.
+
+This reduces API server load on large clusters by distributing pod watching across nodes.
+
+Set `daemonset.useKubeletAPI: true` to replace each node collector's pod
+informer and metrics-server query with local kubelet `/pods` and
+`/stats/summary` polling. Namespace filters, pod/container resource selectors,
+per-resource intervals, environment-variable filters, and promoted node labels
+continue to apply. Kubelet polling is snapshot based and can miss objects whose
+entire lifetime falls between collection intervals.
 
 ### Secret Resource
 

@@ -13,6 +13,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// DefaultResourceList contains every built-in typed resource handler.
+const DefaultResourceList = "pod,container,service,node,deployment,job,cronjob,configmap,secret,persistentvolumeclaim,ingress,horizontalpodautoscaler,serviceaccount,endpoints,persistentvolume,resourcequota,poddisruptionbudget,storageclass,networkpolicy,replicationcontroller,limitrange,lease,role,clusterrole,rolebinding,clusterrolebinding,volumeattachment,certificatesigningrequest,namespace,daemonset,statefulset,replicaset,mutatingwebhookconfiguration,validatingwebhookconfiguration,ingressclass,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding"
+
+// AllResourceList also enables configured custom-resource handlers.
+const AllResourceList = DefaultResourceList + ",crd"
+
 // ResourceConfig holds configuration for a specific resource type
 type ResourceConfig struct {
 	Name                string
@@ -42,6 +48,26 @@ type Config struct {
 	ContainerEnvVars []string
 	// ConfigMapIncludeValues controls whether ConfigMap data values are logged.
 	ConfigMapIncludeValues bool
+	// Node filters pods to only those scheduled on this specific node (by node name).
+	// Used for DaemonSet deployments where each pod logs only local pods.
+	// If empty, no node filtering is applied.
+	Node string
+	// TrackUnscheduledPods when true, collects only pods that have not yet been scheduled
+	// (spec.nodeName is empty). Used by the cluster deployment in advanced mode.
+	TrackUnscheduledPods bool
+	// UseKubeletAPI when true, uses the kubelet API instead of the Kubernetes API
+	// for pod/container collection. Only applicable when Node is set (DaemonSet mode).
+	// The kubelet API is polled since it doesn't support watches.
+	UseKubeletAPI bool
+	// KubeletPort is the port for the kubelet API (default: 10250).
+	KubeletPort int
+	// NodeIP is the IP address of the node for kubelet API access.
+	// Required when UseKubeletAPI is true.
+	NodeIP string
+	// KubeletInsecureSkipVerify disables kubelet TLS certificate verification.
+	// This may be required for self-signed serving certificates and should be
+	// enabled only in trusted cluster networks.
+	KubeletInsecureSkipVerify bool
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types
@@ -57,7 +83,7 @@ func ParseResourceList(resources string) []string {
 	for _, resource := range resourceList {
 		resource = strings.TrimSpace(resource)
 		if resource == "all" {
-			return []string{} // Return empty to use defaults
+			return ParseResourceList(AllResourceList)
 		}
 		if resource != "" {
 			result = append(result, resource)
@@ -300,7 +326,7 @@ func (c *Config) PromotedNodeLabelsFor(resourceName string) []string {
 			resourceConfigured = true
 		}
 	}
-	if !nodeConfigured || !resourceConfigured {
+	if !resourceConfigured || (!nodeConfigured && c.Node == "") {
 		return nil
 	}
 
@@ -350,6 +376,20 @@ func (c *Config) Validate() error {
 			klog.Warningf("Invalid interval %v for resource %s, setting to default LogInterval %v",
 				c.ResourceConfigs[i].Interval, c.ResourceConfigs[i].Name, c.LogInterval)
 			c.ResourceConfigs[i].Interval = c.LogInterval
+		}
+	}
+
+	// Validate kubelet API configuration
+	if c.UseKubeletAPI {
+		if c.Node == "" {
+			return fmt.Errorf("--node is required when --use-kubelet-api is enabled")
+		}
+		if c.NodeIP == "" {
+			return fmt.Errorf("--node-ip is required when --use-kubelet-api is enabled")
+		}
+		if c.KubeletPort <= 0 || c.KubeletPort > 65535 {
+			klog.Warningf("Invalid kubelet port %d, setting to default 10250", c.KubeletPort)
+			c.KubeletPort = 10250
 		}
 	}
 

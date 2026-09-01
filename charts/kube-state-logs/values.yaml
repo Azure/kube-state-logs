@@ -14,6 +14,11 @@ image:
   pullSecrets:
     name:
 
+# Deployment mode: "simple" or "advanced"
+# - simple: Single Deployment that monitors all resources (default)
+# - advanced: DaemonSet for pod/container (per-node), Deployment for other resources
+deploymentMode: simple
+
 # Application configuration
 config:
   logInterval: "1m"
@@ -33,7 +38,8 @@ config:
   logLevel: "info"
 
   # Optional per-resource settings. The interval may be omitted to use logInterval.
-  # To promote node labels, configure pod and/or container and keep node enabled above.
+  # In simple mode, keep node enabled when promoting node labels. Advanced-mode
+  # node collectors retrieve only their own node as needed.
   # Example: ["pod:promote-node-labels=topology.kubernetes.io/zone|kubernetes.io/arch"]
   resourceConfigs: []
 
@@ -49,7 +55,7 @@ config:
   # Optional: include ConfigMap data values.
   configmapIncludeValues: false
 
-# Resource limits
+# Resource limits for deployment (simple mode) or cluster deployment (advanced mode)
 resources:
   limits:
     cpu: 500m
@@ -57,6 +63,26 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
+
+# Resource limits for DaemonSet pods (advanced mode only)
+# These can be smaller since each pod only tracks pods on its local node
+daemonset:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  # Use kubelet API instead of Kubernetes API for pod/container collection
+  # This reduces API server load by polling the local kubelet directly
+  useKubeletAPI: false
+  # Port for the kubelet API (default: 10250)
+  kubeletPort: 10250
+  # Kubelet serving certificates are commonly self-signed. Disabling
+  # verification is compatible with those clusters, but should be used only
+  # when node traffic remains on a trusted cluster network.
+  kubeletInsecureSkipVerify: true
 
 # Node selection and scheduling
 nodeSelector: {}

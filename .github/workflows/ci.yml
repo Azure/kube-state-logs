@@ -60,7 +60,43 @@ jobs:
           version: v3.20.0
 
       - name: Lint Helm chart
-        run: helm lint charts/kube-state-logs
+        run: |
+          set -euo pipefail
+          chart=charts/kube-state-logs
+          helm lint "$chart"
+          helm lint "$chart" --set deploymentMode=advanced
+          helm lint "$chart" --set deploymentMode=advanced --set daemonset.useKubeletAPI=true
+
+          helm template advanced "$chart" \
+            --set deploymentMode=advanced \
+            --set daemonset.useKubeletAPI=true \
+            --set config.enableADXMonAnnotations=true \
+            --set config.adxMonLogDestination=test \
+            --set 'env[0].name=EXTRA' \
+            --set-string 'env[0].value=present' \
+            --set 'config.resourceConfigs={pod:30s:labels=app=api,container:10s}' \
+            > /tmp/kube-state-logs-advanced.yaml
+          grep -q 'resources: \["nodes/proxy"\]' /tmp/kube-state-logs-advanced.yaml
+          grep -q 'resources: \["nodes/stats"\]' /tmp/kube-state-logs-advanced.yaml
+          grep -q 'ResourceType:init_container:test:KubeContainerSnapshot' /tmp/kube-state-logs-advanced.yaml
+          if awk '/^kind: ClusterRole$/{in_role=1; next} in_role && /^  name: advanced-kube-state-logs-node$/{node_role=1} node_role{print} node_role && /^---$/{exit}' /tmp/kube-state-logs-advanced.yaml | grep -q 'metrics.k8s.io'; then
+            echo "Kubelet node role unexpectedly grants metrics-server access" >&2
+            exit 1
+          fi
+
+          helm template cluster-only "$chart" \
+            --set deploymentMode=advanced \
+            --set 'config.resources={deployment,node}' \
+            > /tmp/kube-state-logs-cluster-only.yaml
+          if grep -q '^kind: DaemonSet$' /tmp/kube-state-logs-cluster-only.yaml; then
+            echo "DaemonSet rendered without pod or container resources" >&2
+            exit 1
+          fi
+
+          if helm template invalid "$chart" --set deploymentMode=invalid >/dev/null 2>&1; then
+            echo "Invalid deploymentMode was accepted" >&2
+            exit 1
+          fi
 
   docker:
     name: Build Docker Image (${{ matrix.platform }})
