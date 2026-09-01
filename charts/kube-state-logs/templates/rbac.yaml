@@ -238,7 +238,9 @@ subjects:
     namespace: {{ .Release.Namespace }}
 {{- else }}
 # Advanced mode: Separate RBAC for node (DaemonSet) and cluster (Deployment)
+{{- $hasNodeResources := eq (include "kube-state-logs.hasNodeResources" .) "true" }}
 
+{{- if $hasNodeResources }}
 # Node ServiceAccount - used by DaemonSet for pod/container on local node
 apiVersion: v1
 kind: ServiceAccount
@@ -248,6 +250,7 @@ metadata:
     {{- include "kube-state-logs.labels" . | nindent 4 }}
     app.kubernetes.io/component: node
 ---
+{{- end }}
 # Cluster ServiceAccount - used by Deployment for all other resources
 apiVersion: v1
 kind: ServiceAccount
@@ -257,7 +260,8 @@ metadata:
     {{- include "kube-state-logs.labels" . | nindent 4 }}
     app.kubernetes.io/component: cluster
 ---
-# Node ClusterRole - minimal permissions for pods and metrics only
+{{- if $hasNodeResources }}
+# Node ClusterRole - minimal permissions for local pod/container collection
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -268,10 +272,14 @@ metadata:
 rules:
 {{- $resources := .Values.config.resources | toStrings }}
 {{- if .Values.daemonset.useKubeletAPI }}
-  # When using kubelet API, we need nodes/proxy permission to access kubelet
   - apiGroups: [""]
     resources: ["nodes/proxy"]
     verbs: ["get"]
+{{- if or (has "container" $resources) (has "all" $resources) }}
+  - apiGroups: [""]
+    resources: ["nodes/stats"]
+    verbs: ["get"]
+{{- end }}
 {{- else }}
 {{- if or (has "pod" $resources) (has "container" $resources) (has "all" $resources) }}
   - apiGroups: [""]
@@ -279,12 +287,18 @@ rules:
     verbs: ["list", "watch"]
 {{- end }}
 {{- end }}
-{{- if or (has "container" $resources) (has "all" $resources) }}
+{{- if and (not .Values.daemonset.useKubeletAPI) (or (has "container" $resources) (has "all" $resources)) }}
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods"]
     verbs: ["get", "list"]
 {{- end }}
+{{- if eq (include "kube-state-logs.nodePromotesLabels" .) "true" }}
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
+{{- end }}
 ---
+{{- end }}
 # Cluster ClusterRole - permissions for all non-pod/container resources
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -295,7 +309,7 @@ metadata:
     app.kubernetes.io/component: cluster
 rules:
 {{- $resources := .Values.config.resources | toStrings }}
-{{- /* In advanced mode, cluster deployment always tracks unscheduled pods, so always needs pod access */ -}}
+{{- /* The cluster deployment tracks unscheduled pods when pod snapshots are enabled. */ -}}
 {{- if or (has "pod" $resources) (has "all" $resources) }}
   - apiGroups: [""]
     resources: ["pods"]
@@ -497,6 +511,7 @@ rules:
     verbs: ["list", "watch"]
 {{- end }}
 {{- end }}
+{{- if $hasNodeResources }}
 ---
 # Node ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -514,6 +529,7 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "kube-state-logs.fullname" . }}-node
     namespace: {{ .Release.Namespace }}
+{{- end }}
 ---
 # Cluster ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

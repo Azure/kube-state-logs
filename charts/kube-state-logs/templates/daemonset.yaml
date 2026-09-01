@@ -1,4 +1,4 @@
-{{- if eq .Values.deploymentMode "advanced" }}
+{{- if and (eq .Values.deploymentMode "advanced") (eq (include "kube-state-logs.hasNodeResources" .) "true") }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -48,24 +48,21 @@ spec:
             runAsNonRoot: true
             runAsUser: 1000
           image: "{{ .Values.image.registry }}/{{ .Values.image.org }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/kube-state-logs"]
           args:
             - --log-interval={{ .Values.config.logInterval }}
-            {{- $nodeResources := list }}
-            {{- $resources := .Values.config.resources | toStrings }}
-            {{- if or (has "pod" $resources) (has "all" $resources) }}
-            {{- $nodeResources = append $nodeResources "pod" }}
+            - --resources={{ include "kube-state-logs.nodeResources" . }}
+            {{- $nodeResourceConfigs := include "kube-state-logs.nodeResourceConfigs" . }}
+            {{- if $nodeResourceConfigs }}
+            - --resource-configs={{ $nodeResourceConfigs }}
             {{- end }}
-            {{- if or (has "container" $resources) (has "all" $resources) }}
-            {{- $nodeResources = append $nodeResources "container" }}
-            {{- end }}
-            - --resources={{ $nodeResources | join "," }}
             - --node=$(NODE_NAME)
             {{- if .Values.daemonset.useKubeletAPI }}
             - --use-kubelet-api
             - --node-ip=$(NODE_IP)
             - --kubelet-port={{ .Values.daemonset.kubeletPort }}
+            - --kubelet-insecure-skip-verify={{ .Values.daemonset.kubeletInsecureSkipVerify }}
             {{- end }}
             {{- if .Values.config.namespaces }}
             - --namespaces={{ .Values.config.namespaces }}
@@ -75,6 +72,9 @@ spec:
             - --container-envvars={{ .Values.config.containerEnvVars | join "," }}
             {{- end }}
           env:
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
@@ -92,10 +92,6 @@ spec:
             requests:
               cpu: {{ .Values.daemonset.resources.requests.cpu }}
               memory: {{ .Values.daemonset.resources.requests.memory }}
-          {{- if .Values.env }}
-          env:
-            {{- toYaml .Values.env | nindent 12 }}
-          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

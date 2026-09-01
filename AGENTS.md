@@ -195,6 +195,9 @@ Key configuration options (set via Helm values or environment):
 
 - `--node=<name>` - Filter pods to only those scheduled on this node (used by DaemonSet in advanced mode)
 - `--track-unscheduled-pods` - Only collect pods not yet scheduled to a node (used by Deployment in advanced mode)
+- `--use-kubelet-api` - Poll local kubelet `/pods` and `/stats/summary` for pod/container snapshots
+- `--node-ip=<address>` - Node address used for direct kubelet access
+- `--kubelet-insecure-skip-verify` - Explicitly disable kubelet serving-certificate verification
 
 ## Common Tasks
 

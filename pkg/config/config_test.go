@@ -155,6 +155,25 @@ func TestParseContainerEnvVars(t *testing.T) {
 	}
 }
 
+func TestParseResourceListAllExpandsSupportedResources(t *testing.T) {
+	resources := ParseResourceList("all")
+	if len(resources) < 40 {
+		t.Fatalf("all expanded to only %d resources", len(resources))
+	}
+	for _, required := range []string{"pod", "container", "node", "crd"} {
+		found := false
+		for _, resourceName := range resources {
+			if resourceName == required {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("all expansion is missing %q", required)
+		}
+	}
+}
+
 func TestConfig_PromotedNodeLabelsFor(t *testing.T) {
 	labels := []string{"topology.kubernetes.io/zone"}
 	tests := []struct {
@@ -162,10 +181,12 @@ func TestConfig_PromotedNodeLabelsFor(t *testing.T) {
 		resources       []string
 		resourceConfigs []ResourceConfig
 		target          string
+		node            string
 		expectList      bool
 	}{
 		{name: "pod and node configured", resources: []string{"pod", "node"}, resourceConfigs: []ResourceConfig{{Name: "pod", NodeLabelsToPromote: labels}}, target: "pod", expectList: true},
 		{name: "container and node configured", resources: []string{"container", "node"}, resourceConfigs: []ResourceConfig{{Name: "container", NodeLabelsToPromote: labels}}, target: "container", expectList: true},
+		{name: "node-local pod collector", resources: []string{"pod"}, resourceConfigs: []ResourceConfig{{Name: "pod", NodeLabelsToPromote: labels}}, target: "pod", node: "node-a", expectList: true},
 		{name: "node missing", resources: []string{"pod"}, resourceConfigs: []ResourceConfig{{Name: "pod", NodeLabelsToPromote: labels}}, target: "pod"},
 		{name: "target missing", resources: []string{"node"}, resourceConfigs: []ResourceConfig{{Name: "container", NodeLabelsToPromote: labels}}, target: "container"},
 		{name: "target config missing", resources: []string{"pod", "node"}, target: "pod"},
@@ -175,13 +196,32 @@ func TestConfig_PromotedNodeLabelsFor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{Resources: tt.resources, ResourceConfigs: tt.resourceConfigs}
+			cfg := Config{Resources: tt.resources, ResourceConfigs: tt.resourceConfigs, Node: tt.node}
 			actual := cfg.PromotedNodeLabelsFor(tt.target)
 			if tt.expectList && len(actual) != 1 {
 				t.Fatalf("Expected promoted node labels, got %v", actual)
 			}
 			if !tt.expectList && actual != nil {
 				t.Fatalf("Expected promotion to be disabled, got %v", actual)
+			}
+		})
+	}
+}
+
+func TestConfigValidateKubeletAPI(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  Config
+		wantErr bool
+	}{
+		{name: "valid", config: Config{UseKubeletAPI: true, Node: "node-a", NodeIP: "10.0.0.4", KubeletPort: 10250}},
+		{name: "missing node", config: Config{UseKubeletAPI: true, NodeIP: "10.0.0.4", KubeletPort: 10250}, wantErr: true},
+		{name: "missing node IP", config: Config{UseKubeletAPI: true, Node: "node-a", KubeletPort: 10250}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.config.Validate(); (err != nil) != tt.wantErr {
+				t.Fatalf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

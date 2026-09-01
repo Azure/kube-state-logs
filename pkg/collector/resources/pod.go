@@ -41,6 +41,12 @@ func NewPodHandler(client kubernetes.Interface, promotedNodeLabels ...string) *P
 	}
 }
 
+// UseDirectNodeLabelLookup retrieves only the local node when node-filtered
+// collection is enabled, rather than creating a cluster-wide node informer.
+func (h *PodHandler) UseDirectNodeLabelLookup(client kubernetes.Interface, nodeName string) {
+	h.nodeLabelPromoter.useDirectLookup(client, nodeName)
+}
+
 // SetupInformer sets up the pod informer
 func (h *PodHandler) SetupInformer(factory informers.SharedInformerFactory, logger interfaces.Logger, resyncPeriod time.Duration) error {
 	// Create pod informer
@@ -57,6 +63,7 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 	// Get all pods from the cache
 	pods := utils.SafeGetStoreList(h.GetInformer())
 	listTime := time.Now()
+	labelSelector, fieldSelector := h.GetSelectors()
 
 	for _, obj := range pods {
 		pod, ok := obj.(*corev1.Pod)
@@ -68,7 +75,7 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 			continue
 		}
 
-		if !h.MatchesSelectors(pod) {
+		if !matchesPodSelectors(pod, labelSelector, fieldSelector) {
 			continue
 		}
 
@@ -82,12 +89,12 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 
 // createLogEntry creates a PodData from a pod
 func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
-	return CreatePodLogEntry(pod)
+	return CreatePodLogEntry(pod, h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName))
 }
 
 // CreatePodLogEntry creates a PodData from a pod.
 // This is exported for use by the kubelet handler.
-func CreatePodLogEntry(pod *corev1.Pod) types.PodData {
+func CreatePodLogEntry(pod *corev1.Pod, nodeLabels map[string]string) types.PodData {
 	// Determine QoS class
 	qosClass := string(pod.Status.QOSClass)
 	if qosClass == "" {
@@ -311,7 +318,7 @@ func CreatePodLogEntry(pod *corev1.Pod) types.PodData {
 		},
 		PodUID:                    string(pod.UID),
 		NodeName:                  pod.Spec.NodeName,
-		NodeLabels:                h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName),
+		NodeLabels:                nodeLabels,
 		HostIP:                    pod.Status.HostIP,
 		PodIP:                     pod.Status.PodIP,
 		Phase:                     string(pod.Status.Phase),

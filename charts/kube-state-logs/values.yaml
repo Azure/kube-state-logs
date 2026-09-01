@@ -38,7 +38,8 @@ config:
   logLevel: "info"
 
   # Optional per-resource settings. The interval may be omitted to use logInterval.
-  # To promote node labels, configure pod and/or container and keep node enabled above.
+  # In simple mode, keep node enabled when promoting node labels. Advanced-mode
+  # node collectors retrieve only their own node as needed.
   # Example: ["pod:promote-node-labels=topology.kubernetes.io/zone|kubernetes.io/arch"]
   resourceConfigs: []
 
@@ -78,6 +79,10 @@ daemonset:
   useKubeletAPI: false
   # Port for the kubelet API (default: 10250)
   kubeletPort: 10250
+  # Kubelet serving certificates are commonly self-signed. Disabling
+  # verification is compatible with those clusters, but should be used only
+  # when node traffic remains on a trusted cluster network.
+  kubeletInsecureSkipVerify: true
 
 # Node selection and scheduling
 nodeSelector: {}
