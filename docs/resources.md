@@ -200,6 +200,13 @@ clusters or when that feature is disabled. Scheduled pod and container coverage
 is limited to nodes where the DaemonSet runs, so a custom `nodeSelector`
 intentionally narrows collection coverage.
 
+Kubelet pod snapshots omit the kubelet-local `kubernetes.io/config.seen`
+(first observation time) and `kubernetes.io/config.source` (configuration source)
+annotations. Filtering affects log output only, not the shared snapshot or the
+pod itself. Static/mirror pod annotations `kubernetes.io/config.hash` and
+`kubernetes.io/config.mirror` are retained because they can also exist on
+API-server mirror pods. Other pod fields and informer-mode output are unchanged.
+
 ### Secret Resource
 
 For security, the `secret` resource only logs metadata (name, namespace, type, labels, annotations) - **secret values are never logged**.

@@ -5,6 +5,8 @@ package resources
 
 import (
 	"context"
+	"maps"
+	"reflect"
 	"testing"
 	"time"
 
@@ -23,6 +25,64 @@ import (
 type staticSnapshotSource struct {
 	snapshot *kubelet.Snapshot
 	err      error
+}
+
+func TestKubeletPodHandlerFiltersLocalAnnotations(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		annotations map[string]string
+		want        map[string]string
+	}{
+		{name: "nil"},
+		{name: "empty", annotations: map[string]string{}},
+		{
+			name: "local only",
+			annotations: map[string]string{
+				"kubernetes.io/config.seen":   "2026-09-09T00:00:00Z",
+				"kubernetes.io/config.source": "api",
+			},
+		},
+		{
+			name: "preserve API annotations",
+			annotations: map[string]string{
+				"kubernetes.io/config.seen":        "2026-09-09T00:00:00Z",
+				"kubernetes.io/config.source":      "file",
+				"kubernetes.io/config.hash":        "hash",
+				"kubernetes.io/config.mirror":      "hash",
+				"example.com/custom":               "value",
+				corev1.LastAppliedConfigAnnotation: "{}",
+			},
+			want: map[string]string{
+				"kubernetes.io/config.hash":   "hash",
+				"kubernetes.io/config.mirror": "hash",
+				"example.com/custom":          "value",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			original := maps.Clone(test.annotations)
+			source := &staticSnapshotSource{snapshot: &kubelet.Snapshot{Pods: []corev1.Pod{{
+				ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Annotations: test.annotations},
+			}}}}
+			handler := NewKubeletPodHandler(source, nil, "")
+			entries, err := handler.Collect(context.Background(), nil)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("Collect() = %v, %v; want one entry", entries, err)
+			}
+			if got := entries[0].(types.PodData).Annotations; !reflect.DeepEqual(got, test.want) {
+				t.Errorf("Annotations = %#v, want %#v", got, test.want)
+			}
+			if !reflect.DeepEqual(source.snapshot.Pods[0].Annotations, original) {
+				t.Fatal("Collect() mutated snapshot annotations")
+			}
+			apiEntry := CreatePodLogEntry(&source.snapshot.Pods[0], nil)
+			for _, key := range []string{"kubernetes.io/config.seen", "kubernetes.io/config.source"} {
+				if apiEntry.Annotations[key] != original[key] {
+					t.Errorf("shared formatter changed annotation %q", key)
+				}
+			}
+		})
+	}
 }
 
 func (s *staticSnapshotSource) GetSnapshot(context.Context, bool) (*kubelet.Snapshot, error) {

@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"k8s.io/apimachinery/pkg/fields"
@@ -66,6 +67,12 @@ func (h *KubeletPodHandler) Collect(ctx context.Context, namespaces []string) ([
 		}
 
 		entry := CreatePodLogEntry(pod, h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName))
+		entry.Annotations = maps.Clone(entry.Annotations)
+		delete(entry.Annotations, "kubernetes.io/config.seen")
+		delete(entry.Annotations, "kubernetes.io/config.source")
+		if len(entry.Annotations) == 0 {
+			entry.Annotations = nil
+		}
 		entry.Timestamp = listTime
 		entries = append(entries, entry)
 	}
