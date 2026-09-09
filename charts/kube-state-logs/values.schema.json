@@ -9,6 +9,9 @@
     "daemonset": {
       "type": "object",
       "properties": {
+        "useKubeletAPI": {
+          "type": "boolean"
+        },
         "kubeletPort": {
           "type": "integer",
           "minimum": 1,

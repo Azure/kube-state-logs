@@ -50,7 +50,7 @@ rules:
     resources: ["services"]
     verbs: ["list", "watch"]
 {{- end }}
-{{- if or (has "endpoint" $resources) (has "all" $resources) }}
+{{- if or (has "service" $resources) (has "endpoints" $resources) (has "all" $resources) }}
   - apiGroups: [""]
     resources: ["endpoints"]
     verbs: ["list", "watch"]
@@ -272,9 +272,11 @@ metadata:
 rules:
 {{- $resources := .Values.config.resources | toStrings }}
 {{- if .Values.daemonset.useKubeletAPI }}
+{{- if or (has "pod" $resources) (has "container" $resources) (has "all" $resources) }}
   - apiGroups: [""]
-    resources: ["nodes/proxy"]
+    resources: ["nodes/pods"]
     verbs: ["get"]
+{{- end }}
 {{- if or (has "container" $resources) (has "all" $resources) }}
   - apiGroups: [""]
     resources: ["nodes/stats"]
@@ -340,7 +342,7 @@ rules:
     resources: ["services"]
     verbs: ["list", "watch"]
 {{- end }}
-{{- if or (has "endpoint" $resources) (has "all" $resources) }}
+{{- if or (has "service" $resources) (has "endpoints" $resources) (has "all" $resources) }}
   - apiGroups: [""]
     resources: ["endpoints"]
     verbs: ["list", "watch"]

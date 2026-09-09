@@ -169,7 +169,10 @@ config:
 
 ### Container Resource
 
-The `container` resource provides container-level metrics and requires the Kubernetes Metrics Server to be installed for CPU/memory usage data. Configure which environment variables to capture:
+The `container` resource provides container-level metrics. Advanced mode reads
+CPU/memory usage from the kubelet by default; simple mode and advanced informer
+mode require Kubernetes Metrics Server. Configure which environment variables
+to capture:
 
 ```yaml
 config:
@@ -184,12 +187,13 @@ In [advanced deployment mode](../README.md#deployment-modes), `pod` and `contain
 
 This reduces API server load on large clusters by distributing pod watching across nodes.
 
-Set `daemonset.useKubeletAPI: true` to replace each node collector's pod
-informer and metrics-server query with local kubelet `/pods` and
-`/stats/summary` polling. Namespace filters, pod/container resource selectors,
-per-resource intervals, environment-variable filters, and promoted node labels
-continue to apply. Kubelet polling is snapshot based and can miss objects whose
-entire lifetime falls between collection intervals.
+By default, each node collector uses local kubelet `/pods` and `/stats/summary`
+polling instead of a pod informer and metrics-server query. Namespace filters,
+pod/container resource selectors, per-resource intervals, environment-variable
+filters, and promoted node labels continue to apply. Kubelet polling is snapshot
+based and can miss objects whose entire lifetime falls between collection
+intervals. Set `daemonset.useKubeletAPI: false` to use node-filtered Kubernetes
+informers and metrics-server instead.
 
 ### Secret Resource
 

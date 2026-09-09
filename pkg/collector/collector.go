@@ -433,6 +433,9 @@ func (c *Collector) Run(ctx context.Context) error {
 	// Wait for all informers to sync
 	klog.Info("Waiting for informers to sync...")
 	synced := c.factory.WaitForCacheSync(c.stopCh)
+	if ctx.Err() != nil {
+		return nil
+	}
 	for resourceType, isSynced := range synced {
 		if !isSynced {
 			return fmt.Errorf("failed to sync informer for %v", resourceType)
@@ -443,6 +446,9 @@ func (c *Collector) Run(ctx context.Context) error {
 	if c.podFactory != nil && c.podFactory != c.factory {
 		klog.Info("Waiting for pod factory informers to sync...")
 		podSynced := c.podFactory.WaitForCacheSync(c.stopCh)
+		if ctx.Err() != nil {
+			return nil
+		}
 		for resourceType, isSynced := range podSynced {
 			if !isSynced {
 				return fmt.Errorf("failed to sync pod informer for %v", resourceType)
@@ -454,6 +460,9 @@ func (c *Collector) Run(ctx context.Context) error {
 	if len(c.crdHandlers) > 0 {
 		klog.Info("Waiting for dynamic informers to sync...")
 		dynSynced := c.dynFactory.WaitForCacheSync(c.stopCh)
+		if ctx.Err() != nil {
+			return nil
+		}
 		for resourceType, isSynced := range dynSynced {
 			if !isSynced {
 				klog.Warningf("Failed to sync dynamic informer for %v", resourceType)
@@ -474,7 +483,7 @@ func (c *Collector) Run(ctx context.Context) error {
 	// Wait for all goroutines to finish
 	c.wg.Wait()
 	klog.Info("All goroutines stopped")
-	return ctx.Err()
+	return nil
 }
 
 // startResourceTickers starts individual tickers for each resource based on their configured intervals

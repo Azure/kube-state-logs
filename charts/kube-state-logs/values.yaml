@@ -76,16 +76,18 @@ daemonset:
       memory: 64Mi
   # Use kubelet API instead of Kubernetes API for pod/container collection
   # This reduces API server load by polling the local kubelet directly
-  useKubeletAPI: false
+  useKubeletAPI: true
   # Port for the kubelet API (default: 10250)
   kubeletPort: 10250
-  # Kubelet serving certificates are commonly self-signed. Disabling
-  # verification is compatible with those clusters, but should be used only
-  # when node traffic remains on a trusted cluster network.
-  kubeletInsecureSkipVerify: true
+  # Verify kubelet serving certificates using the projected service-account CA.
+  # Set to true only for legacy clusters whose kubelet certificates cannot be
+  # verified, and only when node traffic remains on a trusted cluster network.
+  kubeletInsecureSkipVerify: false
 
-# Node selection and scheduling
-nodeSelector: {}
+# Node selection and scheduling. Override the OS selector when using a custom
+# image that supports another operating system.
+nodeSelector:
+  kubernetes.io/os: linux
 
 tolerations: []
 

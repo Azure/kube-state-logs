@@ -4,12 +4,98 @@
 package collector
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/azure/kube-state-logs/pkg/collector/resources"
 	"github.com/azure/kube-state-logs/pkg/config"
+	"github.com/azure/kube-state-logs/pkg/interfaces"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
+
+type pendingPodHandler struct{}
+
+func (pendingPodHandler) SetupInformer(factory informers.SharedInformerFactory, _ interfaces.Logger, _ time.Duration) error {
+	factory.Core().V1().Pods().Informer()
+	return nil
+}
+
+func (pendingPodHandler) Collect(context.Context, []string) ([]any, error) {
+	return nil, nil
+}
+
+func TestRunReturnsNilOnContextCancellation(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	factory := informers.NewSharedInformerFactory(client, 0)
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+
+	collector := &Collector{
+		config:      &config.Config{},
+		handlers:    make(map[string]interfaces.ResourceHandler),
+		crdHandlers: make(map[string]*resources.CRDHandler),
+		factory:     factory,
+		podFactory:  factory,
+		dynFactory:  dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 0),
+		stopCh:      make(chan struct{}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := collector.Run(ctx); err != nil {
+		t.Fatalf("Run() returned an error for expected cancellation: %v", err)
+	}
+}
+
+func TestRunReturnsNilWhenCanceledDuringInformerSync(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client := fake.NewSimpleClientset()
+	listStarted := make(chan struct{})
+	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		close(listStarted)
+		<-ctx.Done()
+		return true, nil, ctx.Err()
+	})
+
+	factory := informers.NewSharedInformerFactory(client, 0)
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	collector := &Collector{
+		config:      &config.Config{Resources: []string{"pod"}},
+		handlers:    map[string]interfaces.ResourceHandler{"pod": pendingPodHandler{}},
+		crdHandlers: make(map[string]*resources.CRDHandler),
+		factory:     factory,
+		podFactory:  factory,
+		dynFactory:  dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 0),
+		stopCh:      make(chan struct{}),
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- collector.Run(ctx)
+	}()
+
+	select {
+	case <-listStarted:
+	case <-time.After(time.Second):
+		t.Fatal("pod informer did not start listing")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() returned an error for cancellation during sync: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not stop after cancellation")
+	}
+}
 
 func TestValidateTickerInterval(t *testing.T) {
 	tests := []struct {

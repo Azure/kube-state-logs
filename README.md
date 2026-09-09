@@ -57,26 +57,31 @@ deploymentMode: advanced
 
 **Separate RBAC:** Each component gets its own ServiceAccount and ClusterRole with minimal required permissions.
 
-By default, node collectors use node-filtered Kubernetes informers. To remove
-pod watches from the API server and source container usage directly from each
-node, enable kubelet polling:
+By default, node collectors use kubelet polling to avoid pod watches and source
+container usage directly from each node. To use node-filtered Kubernetes
+informers and metrics-server instead, set `daemonset.useKubeletAPI: false`.
 
 ```yaml
 deploymentMode: advanced
 daemonset:
   useKubeletAPI: true
   kubeletPort: 10250
-  # Commonly needed for self-signed kubelet serving certificates. Disable this
-  # when the service-account CA can verify the certificate presented by kubelet.
-  kubeletInsecureSkipVerify: true
+  # Verification uses the projected service-account CA by default.
+  kubeletInsecureSkipVerify: false
 ```
 
 Kubelet mode reads `/pods` and `/stats/summary` with the DaemonSet pod's
 rotating service-account token. It does not query metrics-server. Because this
 is interval-based snapshot polling, a pod that starts and disappears entirely
 between two polls may not be observed; reduce `config.logInterval` when that
-tradeoff matters. Disabling TLS verification should be limited to trusted
-cluster networks.
+tradeoff matters. Supported AKS versions authorize `/pods` and `/stats/summary`
+through the least-privilege `nodes/pods` and `nodes/stats` subresources. Set
+`kubeletInsecureSkipVerify: true` only for legacy clusters whose kubelet serving
+certificates cannot be verified, and only on trusted cluster networks.
+
+Both chart workloads select Linux nodes by default because the published image
+supports Linux only. Override `nodeSelector.kubernetes.io/os` when using a
+custom image that supports another operating system.
 
 **Separate resource limits:** DaemonSet pods use smaller defaults since they only track local pods:
 
