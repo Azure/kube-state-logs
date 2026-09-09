@@ -79,7 +79,7 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 			continue
 		}
 
-		entry := h.createLogEntry(pod)
+		entry := h.createLogEntryWithContext(ctx, pod)
 		entry.Timestamp = listTime
 		entries = append(entries, entry)
 	}
@@ -89,7 +89,11 @@ func (h *PodHandler) Collect(ctx context.Context, namespaces []string) ([]any, e
 
 // createLogEntry creates a PodData from a pod
 func (h *PodHandler) createLogEntry(pod *corev1.Pod) types.PodData {
-	return CreatePodLogEntry(pod, h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName))
+	return h.createLogEntryWithContext(context.Background(), pod)
+}
+
+func (h *PodHandler) createLogEntryWithContext(ctx context.Context, pod *corev1.Pod) types.PodData {
+	return CreatePodLogEntry(pod, h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName))
 }
 
 // CreatePodLogEntry creates a PodData from a pod.

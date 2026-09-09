@@ -110,14 +110,14 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 
 			// Always log running containers
 			if currentState == ContainerStateRunning {
-				entry := h.createLogEntry(pod, &container, false)
+				entry := h.createLogEntryWithContext(ctx, pod, &container, false)
 				entry.Timestamp = listTime
 				entries = append(entries, entry)
 			}
 
 			// Log newly terminated containers
 			if h.isNewlyTerminated(containerKey, currentState, &container) {
-				entry := h.createLogEntry(pod, &container, false)
+				entry := h.createLogEntryWithContext(ctx, pod, &container, false)
 				entry.Timestamp = listTime
 				entries = append(entries, entry)
 			}
@@ -131,14 +131,14 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 
 			// Always log running init containers
 			if currentState == ContainerStateRunning {
-				entry := h.createLogEntry(pod, &container, true)
+				entry := h.createLogEntryWithContext(ctx, pod, &container, true)
 				entry.Timestamp = listTime
 				entries = append(entries, entry)
 			}
 
 			// Log newly terminated init containers
 			if h.isNewlyTerminated(containerKey, currentState, &container) {
-				entry := h.createLogEntry(pod, &container, true)
+				entry := h.createLogEntryWithContext(ctx, pod, &container, true)
 				entry.Timestamp = listTime
 				entries = append(entries, entry)
 			}
@@ -224,6 +224,10 @@ func (h *ContainerHandler) updateStateCache(currentStates map[string]any) {
 
 // createLogEntry creates a ContainerData from a pod and container status
 func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.ContainerStatus, isInitContainer bool) types.ContainerData {
+	return h.createLogEntryWithContext(context.Background(), pod, container, isInitContainer)
+}
+
+func (h *ContainerHandler) createLogEntryWithContext(ctx context.Context, pod *corev1.Pod, container *corev1.ContainerStatus, isInitContainer bool) types.ContainerData {
 	// Handle nil container case
 	if container == nil {
 		return types.ContainerData{
@@ -238,7 +242,7 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 			},
 			PodName:    pod.Name,
 			NodeName:   pod.Spec.NodeName,
-			NodeLabels: h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName),
+			NodeLabels: h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName),
 			State:      ContainerStateUnknown,
 		}
 	}
@@ -382,7 +386,7 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 		PodName:                 pod.Name,
 		PodUID:                  string(pod.UID),
 		NodeName:                pod.Spec.NodeName,
-		NodeLabels:              h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName),
+		NodeLabels:              h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName),
 		Ready:                   &container.Ready,
 		RestartCount:            container.RestartCount,
 		State:                   state,

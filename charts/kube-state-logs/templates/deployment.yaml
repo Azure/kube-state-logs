@@ -97,7 +97,7 @@ spec:
             {{- end }}
             {{- $crdArgs = append $crdArgs (printf "%s:%s:%s" .apiVersion .resource $customFieldsStr) }}
             {{- end }}
-            - --crd-configs={{ $crdArgs | join "," }}
+            - "--crd-configs={{ $crdArgs | join "," }}"
             {{- end }}
             {{- if .Values.config.namespaces }}
             - --namespaces={{ .Values.config.namespaces }}

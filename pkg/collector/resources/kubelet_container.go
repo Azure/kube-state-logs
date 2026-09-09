@@ -70,10 +70,14 @@ func (h *KubeletContainerHandler) Collect(ctx context.Context, namespaces []stri
 	if snapshot.StatsError != nil {
 		klog.Warningf("Failed to collect container usage from kubelet: %v", snapshot.StatsError)
 	}
-	return h.processPods(snapshot.Pods, snapshot.Stats, namespaces), nil
+	return h.processPodsWithContext(ctx, snapshot.Pods, snapshot.Stats, namespaces), nil
 }
 
 func (h *KubeletContainerHandler) processPods(pods []corev1.Pod, stats *kubelet.StatsSummary, namespaces []string) []any {
+	return h.processPodsWithContext(context.Background(), pods, stats, namespaces)
+}
+
+func (h *KubeletContainerHandler) processPodsWithContext(ctx context.Context, pods []corev1.Pod, stats *kubelet.StatsSummary, namespaces []string) []any {
 	entries := make([]any, 0)
 	currentStates := make(map[string]any)
 	statsLookup := h.buildStatsLookup(stats)
@@ -88,7 +92,7 @@ func (h *KubeletContainerHandler) processPods(pods []corev1.Pod, stats *kubelet.
 			continue
 		}
 
-		nodeLabels := h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName)
+		nodeLabels := h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName)
 		for j := range pod.Status.ContainerStatuses {
 			container := &pod.Status.ContainerStatuses[j]
 			containerKey := h.getContainerKey(string(pod.UID), pod.Namespace, pod.Name, container.Name)

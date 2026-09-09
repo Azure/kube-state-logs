@@ -65,7 +65,7 @@ func (h *KubeletPodHandler) Collect(ctx context.Context, namespaces []string) ([
 			continue
 		}
 
-		entry := CreatePodLogEntry(pod, h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName))
+		entry := CreatePodLogEntry(pod, h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName))
 		entry.Timestamp = listTime
 		entries = append(entries, entry)
 	}

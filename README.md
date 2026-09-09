@@ -74,14 +74,22 @@ Kubelet mode reads `/pods` and `/stats/summary` with the DaemonSet pod's
 rotating service-account token. It does not query metrics-server. Because this
 is interval-based snapshot polling, a pod that starts and disappears entirely
 between two polls may not be observed; reduce `config.logInterval` when that
-tradeoff matters. Supported AKS versions authorize `/pods` and `/stats/summary`
-through the least-privilege `nodes/pods` and `nodes/stats` subresources. Set
-`kubeletInsecureSkipVerify: true` only for legacy clusters whose kubelet serving
-certificates cannot be verified, and only on trusted cluster networks.
+tradeoff matters. Kubelet mode requires the `KubeletFineGrainedAuthz` feature,
+which is enabled by default in Kubernetes 1.33 and later, so `/pods` can be
+authorized through the least-privilege `nodes/pods` subresource. On older
+clusters, or clusters where that feature is disabled, set
+`daemonset.useKubeletAPI: false` to use informer mode. Set
+`kubeletInsecureSkipVerify: true` only when kubelet serving certificates cannot
+be verified, and only on trusted cluster networks.
 
 Both chart workloads select Linux nodes by default because the published image
 supports Linux only. Override `nodeSelector.kubernetes.io/os` when using a
 custom image that supports another operating system.
+
+In advanced mode, scheduled pod and container snapshots are collected only on
+nodes where the DaemonSet runs. A custom `nodeSelector` intentionally limits
+that coverage; when pod collection is enabled, the cluster Deployment continues
+to collect unscheduled pods.
 
 **Separate resource limits:** DaemonSet pods use smaller defaults since they only track local pods:
 

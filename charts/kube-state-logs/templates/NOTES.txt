@@ -1,8 +1,15 @@
 1. Check the logs:
-   kubectl logs --namespace {{ .Release.Namespace }} deployment/kube-state-logs
+{{- if eq .Values.deploymentMode "advanced" }}
+   kubectl logs --namespace {{ .Release.Namespace }} deployment/{{ include "kube-state-logs.fullname" . }}-cluster
+{{- if eq (include "kube-state-logs.hasNodeResources" .) "true" }}
+   kubectl logs --namespace {{ .Release.Namespace }} daemonset/{{ include "kube-state-logs.fullname" . }}-node
+{{- end }}
+{{- else }}
+   kubectl logs --namespace {{ .Release.Namespace }} deployment/{{ include "kube-state-logs.fullname" . }}
+{{- end }}
 
 2. Check the status:
-   kubectl get pods --namespace {{ .Release.Namespace }} -l app.kubernetes.io/name=kube-state-logs
+   kubectl get pods --namespace {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "kube-state-logs.name" . }},app.kubernetes.io/instance={{ .Release.Name }}
 
 3. Configuration:
    - Log Interval: {{ .Values.config.logInterval }}

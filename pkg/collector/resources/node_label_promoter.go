@@ -53,9 +53,9 @@ func (p *nodeLabelPromoter) useDirectLookup(client kubernetes.Interface, nodeNam
 	p.nodeName = nodeName
 }
 
-func (p *nodeLabelPromoter) labelsForNode(nodeName string) map[string]string {
+func (p *nodeLabelPromoter) labelsForNode(ctx context.Context, nodeName string) map[string]string {
 	if p.client != nil {
-		return p.labelsFromAPI(nodeName)
+		return p.labelsFromAPI(ctx, nodeName)
 	}
 	if p.informer == nil || nodeName == "" {
 		return nil
@@ -84,7 +84,7 @@ func (p *nodeLabelPromoter) labelsForNode(nodeName string) map[string]string {
 	return labels
 }
 
-func (p *nodeLabelPromoter) labelsFromAPI(nodeName string) map[string]string {
+func (p *nodeLabelPromoter) labelsFromAPI(ctx context.Context, nodeName string) map[string]string {
 	if nodeName == "" || nodeName != p.nodeName {
 		return nil
 	}
@@ -96,12 +96,14 @@ func (p *nodeLabelPromoter) labelsFromAPI(nodeName string) map[string]string {
 		return cloneStringMap(p.cachedLabels)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	node, err := p.client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	node, err := p.client.CoreV1().Nodes().Get(requestCtx, nodeName, metav1.GetOptions{})
 	if err != nil {
-		klog.Warningf("Failed to retrieve labels for node %s: %v", nodeName, err)
-		p.cacheUntil = time.Now().Add(time.Minute)
+		if ctx.Err() == nil {
+			klog.Warningf("Failed to retrieve labels for node %s: %v", nodeName, err)
+			p.cacheUntil = time.Now().Add(time.Minute)
+		}
 		return cloneStringMap(p.cachedLabels)
 	}
 

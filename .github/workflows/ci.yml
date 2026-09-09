@@ -143,6 +143,33 @@ jobs:
             > /tmp/kube-state-logs-service-only.yaml
           grep -q 'resources: \["endpoints"\]' /tmp/kube-state-logs-service-only.yaml
 
+          helm template crd-no-fields "$chart" \
+            --set 'config.resources={crd}' \
+            --set-string 'config.crdConfigs[0].apiVersion=example.com/v1' \
+            --set-string 'config.crdConfigs[0].resource=widgets' \
+            > /tmp/kube-state-logs-crd-no-fields.yaml
+          grep -q -- '- "--crd-configs=example.com/v1:widgets:"' /tmp/kube-state-logs-crd-no-fields.yaml
+
+          helm install notes-simple "$chart" --dry-run=client --debug \
+            > /tmp/kube-state-logs-notes-simple.txt 2>&1
+          grep -q 'deployment/notes-simple-kube-state-logs$' /tmp/kube-state-logs-notes-simple.txt
+
+          helm install notes-advanced "$chart" --dry-run=client --debug \
+            --set deploymentMode=advanced \
+            > /tmp/kube-state-logs-notes-advanced.txt 2>&1
+          grep -q 'deployment/notes-advanced-kube-state-logs-cluster$' /tmp/kube-state-logs-notes-advanced.txt
+          grep -q 'daemonset/notes-advanced-kube-state-logs-node$' /tmp/kube-state-logs-notes-advanced.txt
+
+          helm install notes-cluster-only "$chart" --dry-run=client --debug \
+            --set deploymentMode=advanced \
+            --set 'config.resources={deployment}' \
+            > /tmp/kube-state-logs-notes-cluster-only.txt 2>&1
+          grep -q 'deployment/notes-cluster-only-kube-state-logs-cluster$' /tmp/kube-state-logs-notes-cluster-only.txt
+          if grep -q 'daemonset/' /tmp/kube-state-logs-notes-cluster-only.txt; then
+            echo "Cluster-only NOTES unexpectedly reference a DaemonSet" >&2
+            exit 1
+          fi
+
           helm template cluster-only "$chart" \
             --set deploymentMode=advanced \
             --set 'config.resources={deployment,node}' \

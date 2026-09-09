@@ -193,7 +193,12 @@ pod/container resource selectors, per-resource intervals, environment-variable
 filters, and promoted node labels continue to apply. Kubelet polling is snapshot
 based and can miss objects whose entire lifetime falls between collection
 intervals. Set `daemonset.useKubeletAPI: false` to use node-filtered Kubernetes
-informers and metrics-server instead.
+informers and metrics-server instead. Kubelet mode requires the
+`KubeletFineGrainedAuthz` feature, which is enabled by default in Kubernetes 1.33
+and later, for least-privilege access to `/pods`; use informer mode on older
+clusters or when that feature is disabled. Scheduled pod and container coverage
+is limited to nodes where the DaemonSet runs, so a custom `nodeSelector`
+intentionally narrows collection coverage.
 
 ### Secret Resource
 

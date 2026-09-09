@@ -6,12 +6,15 @@ package resources
 import (
 	"context"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/azure/kube-state-logs/pkg/kubelet"
 	"github.com/azure/kube-state-logs/pkg/types"
@@ -67,5 +70,43 @@ func TestKubeletPodHandlerAppliesFiltersAndPromotesNodeLabels(t *testing.T) {
 	}
 	if _, exists := podData.NodeLabels["ignored"]; exists {
 		t.Fatalf("unexpected promoted label: %#v", podData.NodeLabels)
+	}
+}
+
+func TestKubeletPodHandlerCancelsNodeLabelLookup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	source := &staticSnapshotSource{snapshot: &kubelet.Snapshot{Pods: []corev1.Pod{{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default"},
+		Spec:       corev1.PodSpec{NodeName: "node-a"},
+	}}}}
+	client := fake.NewSimpleClientset()
+	lookupStarted := make(chan struct{})
+	client.PrependReactor("get", "nodes", func(k8stesting.Action) (bool, runtime.Object, error) {
+		close(lookupStarted)
+		<-ctx.Done()
+		return true, nil, ctx.Err()
+	})
+	handler := NewKubeletPodHandler(source, client, "node-a", "kubernetes.io/arch")
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := handler.Collect(ctx, nil)
+		done <- err
+	}()
+
+	select {
+	case <-lookupStarted:
+	case <-time.After(time.Second):
+		t.Fatal("node label lookup did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Collect() error after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Collect() did not stop after cancellation")
 	}
 }
