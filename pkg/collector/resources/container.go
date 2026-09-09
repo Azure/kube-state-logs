@@ -89,6 +89,12 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 	currentStates := make(map[string]any)
 	listTime := time.Now()
 	labelSelector, fieldSelector := h.GetSelectors()
+	metricsCtx := ctx
+	if h.nodeName != "" {
+		var cancel context.CancelFunc
+		metricsCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+	}
 
 	// Collect all metrics upfront for efficiency
 	if h.nodeName == "" {
@@ -113,7 +119,7 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 			if pod.Spec.NodeName != h.nodeName {
 				continue
 			}
-			h.collectPodMetrics(ctx, pod)
+			h.collectPodMetrics(metricsCtx, pod)
 		}
 
 		// Process regular containers
@@ -434,12 +440,10 @@ func (h *ContainerHandler) createLogEntryWithContext(ctx context.Context, pod *c
 }
 
 func (h *ContainerHandler) collectPodMetrics(ctx context.Context, pod *corev1.Pod) {
-	if h.metricsClient == nil {
+	if h.metricsClient == nil || ctx.Err() != nil {
 		return
 	}
-	metricsCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	podMetrics, err := h.metricsClient.MetricsV1beta1().PodMetricses(pod.Namespace).Get(metricsCtx, pod.Name, metav1.GetOptions{})
+	podMetrics, err := h.metricsClient.MetricsV1beta1().PodMetricses(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return
 	}

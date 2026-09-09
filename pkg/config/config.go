@@ -364,6 +364,10 @@ func SetLogLevel(level string) error {
 
 // Validate checks the configuration for potential issues and fixes them
 func (c *Config) Validate() error {
+	if c.Node != "" && c.TrackUnscheduledPods {
+		return fmt.Errorf("--node and --track-unscheduled-pods are mutually exclusive")
+	}
+
 	// Validate LogInterval
 	if c.LogInterval <= 0 {
 		klog.Warningf("Invalid LogInterval %v, setting to default 1 minute", c.LogInterval)

@@ -484,11 +484,14 @@ func TestConfig_NodeFilteringFields(t *testing.T) {
 		name                 string
 		node                 string
 		trackUnscheduledPods bool
+		useKubeletAPI        bool
+		wantErr              bool
 	}{
 		{name: "empty node filter"},
 		{name: "node filter set", node: "worker-node-1"},
 		{name: "track unscheduled pods enabled", trackUnscheduledPods: true},
-		{name: "both set", node: "node-abc", trackUnscheduledPods: true},
+		{name: "both set", node: "node-abc", trackUnscheduledPods: true, wantErr: true},
+		{name: "both set with kubelet", node: "node-abc", trackUnscheduledPods: true, useKubeletAPI: true, wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -497,10 +500,13 @@ func TestConfig_NodeFilteringFields(t *testing.T) {
 				LogInterval:          time.Minute,
 				Node:                 tt.node,
 				TrackUnscheduledPods: tt.trackUnscheduledPods,
+				UseKubeletAPI:        tt.useKubeletAPI,
+				NodeIP:               "10.0.0.4",
+				KubeletPort:          10250,
 			}
 
-			if err := cfg.Validate(); err != nil {
-				t.Errorf("Validate() returned error: %v", err)
+			if err := cfg.Validate(); (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if cfg.Node != tt.node {
 				t.Errorf("Node = %q, want %q", cfg.Node, tt.node)
