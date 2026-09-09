@@ -193,6 +193,7 @@ Generate log-keys annotation from resources list (used in simple mode)
 {{- if has "all" $logResources -}}
 {{- $logResources = splitList "," (include "kube-state-logs.allResources" .) -}}
 {{- end -}}
+{{- $logResources = without $logResources "crd" -}}
 {{- range $index, $resource := $logResources -}}
 {{- if $index -}}{{$annotation = printf "%s," $annotation}}{{- end -}}
 {{- $snapshotName := include "kube-state-logs.resourceSnapshotName" $resource -}}
@@ -210,7 +211,7 @@ Generate log-keys annotation from resources list (used in simple mode)
 {{- $annotation = printf "%s,ResourceType:%s:%s:%s" $annotation $resourceType $adxMonDestination $tableName -}}
 {{- end -}}
 {{- end -}}
-{{- $annotation -}}
+{{- trimPrefix "," $annotation -}}
 {{- end }}
 
 {{/*
@@ -239,7 +240,7 @@ Generate log-keys annotation for cluster Deployment (advanced mode - all resourc
 {{- $first := true -}}
 {{- $clusterResources := splitList "," (include "kube-state-logs.clusterResources" .) -}}
 {{- range $resource := $clusterResources -}}
-{{- if $resource -}}
+{{- if and $resource (ne $resource "crd") -}}
 {{- if not $first -}}{{$annotation = printf "%s," $annotation}}{{- end -}}
 {{- $first = false -}}
 {{- $snapshotName := include "kube-state-logs.resourceSnapshotName" $resource -}}
@@ -254,5 +255,5 @@ Generate log-keys annotation for cluster Deployment (advanced mode - all resourc
 {{- $annotation = printf "%s,ResourceType:%s:%s:%s" $annotation $resourceType $adxMonDestination $tableName -}}
 {{- end -}}
 {{- end -}}
-{{- $annotation -}}
+{{- trimPrefix "," $annotation -}}
 {{- end }}

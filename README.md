@@ -86,6 +86,12 @@ Both chart workloads select Linux nodes by default because the published image
 supports Linux only. Override `nodeSelector.kubernetes.io/os` when using a
 custom image that supports another operating system.
 
+Kubelet responses are limited to 10 MiB each to reduce buffering and decoding
+memory pressure on node collectors. Larger responses are rejected; use
+`daemonset.useKubeletAPI: false` on nodes that exceed this limit. The limit is
+not a total memory bound: decoded objects and cached snapshots also consume
+memory, so size the DaemonSet memory limit for the workload.
+
 In advanced mode, scheduled pod and container snapshots are collected only on
 nodes where the DaemonSet runs. A custom `nodeSelector` intentionally limits
 that coverage; when pod collection is enabled, the cluster Deployment continues

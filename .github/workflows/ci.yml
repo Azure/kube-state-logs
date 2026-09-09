@@ -108,6 +108,27 @@ jobs:
             done
           done
 
+          for mode in simple advanced; do
+            for resources in all crd; do
+              rendered=$(helm template crd-routing "$chart" \
+                --set deploymentMode="$mode" \
+                --set "config.resources={$resources}" \
+                --set config.enableADXMonAnnotations=true \
+                --set config.adxMonLogDestination=test \
+                --set-string 'config.crdConfigs[0].apiVersion=example.com/v1' \
+                --set-string 'config.crdConfigs[0].resource=widgets' \
+                --set-string 'config.crdConfigs[0].kind=Widget')
+              if [[ "$rendered" == *"ResourceType:crd:"* || "$rendered" != *"ResourceType:widget:test:KubeWidgetSnapshot"* ]]; then
+                echo "Invalid CRD routing in $mode mode with resources=$resources" >&2
+                exit 1
+              fi
+              if [[ "$resources" == crd && "$rendered" != *"--resources=crd"* ]]; then
+                echo "CRD collector selection was lost in $mode mode" >&2
+                exit 1
+              fi
+            done
+          done
+
           helm template advanced "$chart" \
             --set deploymentMode=advanced \
             --set config.enableADXMonAnnotations=true \

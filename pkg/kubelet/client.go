@@ -32,7 +32,7 @@ const (
 	// ServiceAccountCAPath is the path to the service account CA certificate.
 	ServiceAccountCAPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
-	maxResponseBytes = 100 * 1024 * 1024
+	maxResponseBytes = 10 * 1024 * 1024
 )
 
 // Interface is the kubelet API surface used by the collectors.
