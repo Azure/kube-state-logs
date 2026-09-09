@@ -251,6 +251,7 @@ func (c *Collector) registerHandlers() {
 	if c.config.Node != "" {
 		podHandler.UseDirectNodeLabelLookup(c.client, c.config.Node)
 		containerHandler.UseDirectNodeLabelLookup(c.client, c.config.Node)
+		containerHandler.SetNodeFilter(c.config.Node)
 	}
 
 	// Register resource handlers (informer-based)

@@ -38,6 +38,7 @@ type ContainerHandler struct {
 	metricsClient     metricsclientset.Interface
 	envVarFilter      map[string]struct{}
 	nodeLabelPromoter nodeLabelPromoter
+	nodeName          string
 }
 
 // NewContainerHandler creates a new ContainerHandler
@@ -54,6 +55,10 @@ func NewContainerHandler(client kubernetes.Interface, metricsClient metricsclien
 		envVarFilter:      filter,
 		nodeLabelPromoter: newNodeLabelPromoter(promotedNodeLabels),
 	}
+}
+
+func (h *ContainerHandler) SetNodeFilter(nodeName string) {
+	h.nodeName = nodeName
 }
 
 // UseDirectNodeLabelLookup retrieves only the local node when node-filtered
@@ -86,7 +91,9 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 	labelSelector, fieldSelector := h.GetSelectors()
 
 	// Collect all metrics upfront for efficiency
-	h.collectAllMetrics(ctx, namespaces)
+	if h.nodeName == "" {
+		h.collectAllMetrics(ctx, namespaces)
+	}
 
 	for _, obj := range pods {
 		pod, ok := obj.(*corev1.Pod)
@@ -100,6 +107,13 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 
 		if !matchesPodSelectors(pod, labelSelector, fieldSelector) {
 			continue
+		}
+
+		if h.nodeName != "" {
+			if pod.Spec.NodeName != h.nodeName {
+				continue
+			}
+			h.collectPodMetrics(ctx, pod)
 		}
 
 		// Process regular containers
@@ -417,6 +431,23 @@ func (h *ContainerHandler) createLogEntryWithContext(ctx context.Context, pod *c
 	}
 
 	return data
+}
+
+func (h *ContainerHandler) collectPodMetrics(ctx context.Context, pod *corev1.Pod) {
+	if h.metricsClient == nil {
+		return
+	}
+	metricsCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	podMetrics, err := h.metricsClient.MetricsV1beta1().PodMetricses(pod.Namespace).Get(metricsCtx, pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return
+	}
+	for index := range podMetrics.Containers {
+		containerMetrics := &podMetrics.Containers[index]
+		key := h.getMetricsCacheKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
+		h.metricsCache.Add(key, containerMetrics)
+	}
 }
 
 // collectAllMetrics retrieves all pod metrics for the given namespaces and stores them in cache

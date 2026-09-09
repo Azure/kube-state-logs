@@ -61,6 +61,7 @@ func (s *CachedSnapshotSource) GetSnapshot(ctx context.Context, includeStats boo
 		}
 		s.pods = pods
 		s.podsFetchedAt = time.Now()
+		s.statsFetchedAt = time.Time{}
 	}
 
 	snapshot := &Snapshot{Pods: s.pods}

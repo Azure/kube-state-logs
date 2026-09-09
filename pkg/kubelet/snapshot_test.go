@@ -6,6 +6,7 @@ package kubelet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -60,6 +61,41 @@ func TestCachedSnapshotSourceCoalescesRequests(t *testing.T) {
 	}
 }
 
+func TestCachedSnapshotSourceRefreshesStatsWithPods(t *testing.T) {
+	for _, podOnlyRefresh := range []bool{false, true} {
+		t.Run(fmt.Sprintf("podOnlyRefresh=%t", podOnlyRefresh), func(t *testing.T) {
+			client := &fakeKubeletClient{
+				pods:  []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "old-pod"}}},
+				stats: &StatsSummary{},
+			}
+			source := NewCachedSnapshotSource(client, time.Hour)
+			if _, err := source.GetSnapshot(context.Background(), true); err != nil {
+				t.Fatal(err)
+			}
+			source.podsFetchedAt = time.Now().Add(-2 * time.Hour)
+			client.pods = []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "new-pod"}}}
+			client.stats = &StatsSummary{Pods: []PodStats{{PodRef: PodReference{Name: "new-pod"}}}}
+			if podOnlyRefresh {
+				if _, err := source.GetSnapshot(context.Background(), false); err != nil {
+					t.Fatal(err)
+				}
+				if client.statsCalls != 1 {
+					t.Fatalf("pod-only refresh fetched stats: %d calls", client.statsCalls)
+				}
+			}
+			snapshot, err := source.GetSnapshot(context.Background(), true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if client.podCalls != 2 || client.statsCalls != 2 {
+				t.Fatalf("calls = pods:%d stats:%d, want 2 each", client.podCalls, client.statsCalls)
+			}
+			if snapshot.Pods[0].Name != "new-pod" || snapshot.Stats != client.stats {
+				t.Fatalf("snapshot did not refresh pods and stats: %#v", snapshot)
+			}
+		})
+	}
+}
 func TestCachedSnapshotSourceKeepsPodsWhenStatsFail(t *testing.T) {
 	client := &fakeKubeletClient{
 		pods:     []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "pod-a"}}},
