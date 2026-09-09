@@ -90,6 +90,24 @@ jobs:
           helm lint "$chart" --set deploymentMode=advanced
           helm lint "$chart" --set deploymentMode=advanced --set daemonset.useKubeletAPI=false
 
+          for mode in simple advanced; do
+            for resources in all daemonset,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding; do
+              rendered=$(helm template routing "$chart" \
+                --set deploymentMode="$mode" \
+                --set "config.resources={$resources}" \
+                --set config.enableADXMonAnnotations=true \
+                --set config.adxMonLogDestination=test)
+              for snapshot in DaemonSet PriorityClass RuntimeClass ValidatingAdmissionPolicy ValidatingAdmissionPolicyBinding; do
+                resource=$(printf '%s' "$snapshot" | tr '[:upper:]' '[:lower:]')
+                expected="ResourceType:$resource:test:Kube${snapshot}Snapshot"
+                if [[ "$rendered" != *"$expected"* ]]; then
+                  echo "Missing ADX route in $mode mode with resources=$resources: $expected" >&2
+                  exit 1
+                fi
+              done
+            done
+          done
+
           helm template advanced "$chart" \
             --set deploymentMode=advanced \
             --set config.enableADXMonAnnotations=true \

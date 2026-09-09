@@ -174,6 +174,11 @@ Convert resource name to proper snapshot name
 {{- else if eq $resource "mutatingwebhookconfiguration" -}}MutatingWebhookConfigurationSnapshot
 {{- else if eq $resource "validatingwebhookconfiguration" -}}ValidatingWebhookConfigurationSnapshot
 {{- else if eq $resource "ingressclass" -}}IngressClassSnapshot
+{{- else if eq $resource "daemonset" -}}DaemonSetSnapshot
+{{- else if eq $resource "priorityclass" -}}PriorityClassSnapshot
+{{- else if eq $resource "runtimeclass" -}}RuntimeClassSnapshot
+{{- else if eq $resource "validatingadmissionpolicy" -}}ValidatingAdmissionPolicySnapshot
+{{- else if eq $resource "validatingadmissionpolicybinding" -}}ValidatingAdmissionPolicyBindingSnapshot
 {{- else -}}{{$resource | title}}Snapshot
 {{- end -}}
 {{- end }}

@@ -179,7 +179,23 @@ func TestClientReturnsStatusError(t *testing.T) {
 }
 
 func TestNanoCoresToMilliCores(t *testing.T) {
-	if got := NanoCoresToMilliCores(250_500_000); got != 250 {
-		t.Fatalf("NanoCoresToMilliCores() = %d, want 250", got)
+	for _, test := range []struct {
+		name      string
+		nanoCores uint64
+		want      int64
+	}{
+		{name: "zero", nanoCores: 0, want: 0},
+		{name: "one nanocore", nanoCores: 1, want: 1},
+		{name: "below one millicore", nanoCores: 999_999, want: 1},
+		{name: "exact millicore", nanoCores: 1_000_000, want: 1},
+		{name: "fractional millicore", nanoCores: 250_500_000, want: 251},
+		{name: "exact millicores", nanoCores: 250_000_000, want: 250},
+		{name: "maximum input", nanoCores: ^uint64(0), want: 18_446_744_073_710},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := NanoCoresToMilliCores(test.nanoCores); got != test.want {
+				t.Fatalf("NanoCoresToMilliCores(%d) = %d, want %d", test.nanoCores, got, test.want)
+			}
+		})
 	}
 }

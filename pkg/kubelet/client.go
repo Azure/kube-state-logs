@@ -247,5 +247,9 @@ func (c *Client) GetPort() int {
 
 // NanoCoresToMilliCores converts CPU usage from nanocores to millicores.
 func NanoCoresToMilliCores(nanoCores uint64) int64 {
-	return int64(nanoCores / 1_000_000)
+	milliCores := nanoCores / 1_000_000
+	if nanoCores%1_000_000 != 0 {
+		milliCores++
+	}
+	return int64(milliCores)
 }
