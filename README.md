@@ -31,6 +31,85 @@ helm install kube-state-logs ./charts/kube-state-logs \
   --create-namespace
 ```
 
+## Deployment Modes
+
+kube-state-logs supports two deployment modes, inspired by [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics):
+
+### Simple Mode (Default)
+
+A single Deployment monitors all configured resources. Best for smaller clusters or when simplicity is preferred.
+
+```yaml
+deploymentMode: simple  # This is the default
+```
+
+### Advanced Mode
+
+Uses a DaemonSet for pod/container resources (one pod per node) and a separate Deployment for all other resources. Each DaemonSet pod only logs pods scheduled on its local node, reducing API server load on large clusters. The Deployment also tracks unscheduled pods.
+
+```yaml
+deploymentMode: advanced
+```
+
+**Advanced mode creates:**
+- `<release>-node` DaemonSet: Logs pods/containers on the local node using `--node` flag
+- `<release>-cluster` Deployment: Logs all other resources + unscheduled pods using `--track-unscheduled-pods` flag
+
+**Separate RBAC:** Each component gets its own ServiceAccount and ClusterRole with minimal required permissions.
+
+By default, node collectors use kubelet polling to avoid pod watches and source
+container usage directly from each node. To use node-filtered Kubernetes
+informers and metrics-server instead, set `daemonset.useKubeletAPI: false`.
+
+```yaml
+deploymentMode: advanced
+daemonset:
+  useKubeletAPI: true
+  kubeletPort: 10250
+  # Verification uses the projected service-account CA by default.
+  kubeletInsecureSkipVerify: false
+```
+
+Kubelet mode reads `/pods` and `/stats/summary` with the DaemonSet pod's
+rotating service-account token. It does not query metrics-server. Because this
+is interval-based snapshot polling, a pod that starts and disappears entirely
+between two polls may not be observed; reduce `config.logInterval` when that
+tradeoff matters. Kubelet mode requires the `KubeletFineGrainedAuthz` feature,
+which is enabled by default in Kubernetes 1.33 and later, so `/pods` can be
+authorized through the least-privilege `nodes/pods` subresource. On older
+clusters, or clusters where that feature is disabled, set
+`daemonset.useKubeletAPI: false` to use informer mode. Set
+`kubeletInsecureSkipVerify: true` only when kubelet serving certificates cannot
+be verified, and only on trusted cluster networks.
+
+Both chart workloads select Linux nodes by default because the published image
+supports Linux only. Override `nodeSelector.kubernetes.io/os` when using a
+custom image that supports another operating system.
+
+Kubelet responses are limited to 10 MiB each to reduce buffering and decoding
+memory pressure on node collectors. Larger responses are rejected; use
+`daemonset.useKubeletAPI: false` on nodes that exceed this limit. The limit is
+not a total memory bound: decoded objects and cached snapshots also consume
+memory, so size the DaemonSet memory limit for the workload.
+
+In advanced mode, scheduled pod and container snapshots are collected only on
+nodes where the DaemonSet runs. A custom `nodeSelector` intentionally limits
+that coverage; when pod collection is enabled, the cluster Deployment continues
+to collect unscheduled pods.
+
+**Separate resource limits:** DaemonSet pods use smaller defaults since they only track local pods:
+
+```yaml
+daemonset:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+```
+
 ## Configuration
 
 Configure via Helm values:
