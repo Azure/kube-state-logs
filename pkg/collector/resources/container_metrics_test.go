@@ -20,6 +20,74 @@ import (
 	"github.com/azure/kube-state-logs/pkg/types"
 )
 
+func TestContainerHandlerDoesNotReusePreviousMetrics(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		canceled bool
+		recreate bool
+	}{
+		{name: "failed request"},
+		{name: "canceled collection", canceled: true},
+		{name: "recreated pod with failed request", recreate: true},
+		{name: "recreated pod with canceled collection", canceled: true, recreate: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			pod := createTestPodWithContainers("local", "default", []corev1.Container{{Name: "app"}})
+			pod.Spec.NodeName = "node-a"
+			pod.Spec.InitContainers = []corev1.Container{{Name: "setup"}}
+			pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{Name: "setup", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}}
+			metrics := &metricsv1beta1.PodMetrics{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace}}
+			for _, name := range []string{"app", "setup"} {
+				metrics.Containers = append(metrics.Containers, metricsv1beta1.ContainerMetrics{Name: name, Usage: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("32Mi"),
+				}})
+			}
+			metricsClient := metricsfake.NewSimpleClientset()
+			metricsResource := metricsv1beta1.SchemeGroupVersion.WithResource("pods")
+			if err := metricsClient.Tracker().Create(metricsResource, metrics, pod.Namespace); err != nil {
+				t.Fatal(err)
+			}
+			handler := NewContainerHandler(fake.NewSimpleClientset(), metricsClient, nil)
+			handler.SetNodeFilter("node-a")
+			first, err := handler.processPods(context.Background(), []any{pod}, nil)
+			if err != nil || len(first) != 2 {
+				t.Fatalf("first collection: entries=%d, error=%v", len(first), err)
+			}
+			for _, entry := range first {
+				data := entry.(types.ContainerData)
+				if data.UsageCPUMillicore == nil || *data.UsageCPUMillicore != 100 || data.UsageMemoryBytes == nil || *data.UsageMemoryBytes != 32*1024*1024 {
+					t.Fatalf("first collection missing expected usage: %#v", data)
+				}
+			}
+			if len(handler.metricsCache.ListKeys()) != 0 {
+				t.Fatal("metrics cache retained entries after collection")
+			}
+			if err := metricsClient.Tracker().Delete(metricsResource, pod.Namespace, pod.Name); err != nil {
+				t.Fatal(err)
+			}
+			if test.recreate {
+				pod = pod.DeepCopy()
+				pod.UID = "replacement-uid"
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if test.canceled {
+				cancel()
+			}
+			second, err := handler.processPods(ctx, []any{pod}, nil)
+			if err != nil || len(second) != 2 {
+				t.Fatalf("second collection: entries=%d, error=%v", len(second), err)
+			}
+			for _, entry := range second {
+				data := entry.(types.ContainerData)
+				if data.PodUID != string(pod.UID) || data.UsageCPUMillicore != nil || data.UsageMemoryBytes != nil {
+					t.Fatalf("second collection has stale identity or usage: %#v", data)
+				}
+			}
+		})
+	}
+}
+
 func TestContainerHandlerMetricsScope(t *testing.T) {
 	for _, test := range []struct {
 		name           string
