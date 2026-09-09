@@ -3,10 +3,14 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**' ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
 
 env:
   REGISTRY: ghcr.io
@@ -15,6 +19,25 @@ env:
   CHART_REPO: ghcr.io/${{ github.repository }}/charts
 
 jobs:
+  branch-metadata:
+    name: Validate Branch Metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      image_tag: ${{ steps.branch.outputs.image_tag }}
+      chart_version: ${{ steps.branch.outputs.chart_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Test branch metadata
+        run: bash .github/scripts/branch-metadata_test.sh
+
+      - name: Get branch metadata
+        id: branch
+        run: bash .github/scripts/branch-metadata.sh >> "$GITHUB_OUTPUT"
+
   fmt:
     name: Go Format
     runs-on: ubuntu-latest
@@ -62,11 +85,20 @@ jobs:
       - name: Lint Helm chart
         run: helm lint charts/kube-state-logs
 
+      - name: Set up yq
+        working-directory: ${{ runner.temp }}
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/mikefarah/yq/v4@v4.45.1
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Test chart publishing
+        run: bash .github/scripts/publishing_test.sh
+
   docker:
     name: Build Docker Image (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
-    needs: [fmt, test, helm-lint]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [fmt, test, helm-lint, branch-metadata]
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/') || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
       packages: write
@@ -103,6 +135,7 @@ jobs:
           images: ${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ needs.branch-metadata.outputs.image_tag }},enable=${{ needs.branch-metadata.outputs.image_tag != '' }}
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
@@ -145,12 +178,17 @@ jobs:
   docker-merge:
     name: Merge Docker Manifests
     runs-on: ubuntu-latest
-    needs: [docker]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [docker, branch-metadata]
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/') || startsWith(github.ref, 'refs/tags/v'))
+    outputs:
+      published: ${{ steps.current.outputs.publish }}
     permissions:
       contents: read
       packages: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
       - name: Download digests
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -179,12 +217,18 @@ jobs:
           images: ${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ needs.branch-metadata.outputs.image_tag }},enable=${{ needs.branch-metadata.outputs.image_tag != '' }}
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
             type=sha
 
+      - name: Check current branch head
+        id: current
+        run: bash .github/scripts/branch-metadata.sh current >> "$GITHUB_OUTPUT"
+
       - name: Create manifest list and push
+        if: steps.current.outputs.publish == 'true'
         working-directory: /tmp/digests
         run: |
           set -euo pipefail
@@ -213,8 +257,8 @@ jobs:
   helm-publish:
     name: Package and Publish Helm Chart
     runs-on: ubuntu-latest
-    needs: [docker-merge]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [docker-merge, branch-metadata]
+    if: github.event_name == 'push' && needs.docker-merge.outputs.published == 'true' && (startsWith(github.ref, 'refs/heads/') || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
       packages: write
@@ -232,6 +276,8 @@ jobs:
 
       - name: Get version
         id: version
+        env:
+          BRANCH_CHART_VERSION: ${{ needs.branch-metadata.outputs.chart_version }}
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
@@ -242,17 +288,17 @@ jobs:
               echo "Error: Tag version '$VERSION' is not valid semver (expected x.y.z or x.y.z-prerelease)" >&2
               exit 1
             fi
+          elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            VERSION="0.0.0-main.${GITHUB_SHA:0:7}"
           else
-            # Use branch name and short SHA for dev version
-            # Sanitize branch name: replace invalid semver chars with dashes
-            BRANCH=$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '-' | tr -cd '[:alnum:]-.')
-            VERSION="0.0.0-${BRANCH}.${GITHUB_SHA:0:7}"
+            VERSION="${BRANCH_CHART_VERSION:?Missing branch chart version}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Package Helm chart
         env:
           CHART_VERSION: ${{ steps.version.outputs.version }}
+          BRANCH_IMAGE_TAG: ${{ needs.branch-metadata.outputs.image_tag }}
         run: |
           set -euo pipefail
           # Update Chart.yaml with the version
@@ -263,9 +309,15 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             # For releases, use v-prefixed tag (v1.2.3)
             sed -i "s/^  tag:.*/  tag: v$CHART_VERSION/" charts/kube-state-logs/values.yaml
-          else
+          elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
             # For main branch, use latest
             sed -i "s/^  tag:.*/  tag: latest/" charts/kube-state-logs/values.yaml
+          else
+            sed -i "s/^  tag:.*/  tag: ${BRANCH_IMAGE_TAG:?Missing branch image tag}/" charts/kube-state-logs/values.yaml
+            sed -i 's/^  pullPolicy:.*/  pullPolicy: Always/' charts/kube-state-logs/values.yaml
+            sed -i "s/^appVersion:.*/appVersion: \"sha-${GITHUB_SHA:0:7}\"/" charts/kube-state-logs/Chart.yaml
+            helm lint charts/kube-state-logs
+            helm template kube-state-logs charts/kube-state-logs > /dev/null
           fi
           
           helm package charts/kube-state-logs
@@ -276,7 +328,12 @@ jobs:
             exit 1
           fi
 
+      - name: Check current branch head
+        id: current
+        run: bash .github/scripts/branch-metadata.sh current >> "$GITHUB_OUTPUT"
+
       - name: Push Helm chart to GHCR
+        if: steps.current.outputs.publish == 'true'
         env:
           CHART_REPO_PATH: ${{ env.CHART_REPO }}
           CHART_VERSION: ${{ steps.version.outputs.version }}
