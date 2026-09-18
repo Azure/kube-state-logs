@@ -38,6 +38,7 @@ type ContainerHandler struct {
 	metricsClient     metricsclientset.Interface
 	envVarFilter      map[string]struct{}
 	nodeLabelPromoter nodeLabelPromoter
+	nodeName          string
 }
 
 // NewContainerHandler creates a new ContainerHandler
@@ -54,6 +55,16 @@ func NewContainerHandler(client kubernetes.Interface, metricsClient metricsclien
 		envVarFilter:      filter,
 		nodeLabelPromoter: newNodeLabelPromoter(promotedNodeLabels),
 	}
+}
+
+func (h *ContainerHandler) SetNodeFilter(nodeName string) {
+	h.nodeName = nodeName
+}
+
+// UseDirectNodeLabelLookup retrieves only the local node when node-filtered
+// collection is enabled, rather than creating a cluster-wide node informer.
+func (h *ContainerHandler) UseDirectNodeLabelLookup(client kubernetes.Interface, nodeName string) {
+	h.nodeLabelPromoter.useDirectLookup(client, nodeName)
 }
 
 // SetupInformer sets up the pod informer (containers are accessed through pods)
@@ -77,9 +88,18 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 	var entries []any
 	currentStates := make(map[string]any)
 	listTime := time.Now()
+	labelSelector, fieldSelector := h.GetSelectors()
+	metricsCtx := ctx
+	if h.nodeName != "" {
+		var cancel context.CancelFunc
+		metricsCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+	}
 
 	// Collect all metrics upfront for efficiency
-	h.collectAllMetrics(ctx, namespaces)
+	if h.nodeName == "" {
+		h.collectAllMetrics(ctx, namespaces)
+	}
 
 	for _, obj := range pods {
 		pod, ok := obj.(*corev1.Pod)
@@ -91,26 +111,33 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 			continue
 		}
 
-		if !h.MatchesSelectors(pod) {
+		if !matchesPodSelectors(pod, labelSelector, fieldSelector) {
 			continue
+		}
+
+		if h.nodeName != "" {
+			if pod.Spec.NodeName != h.nodeName {
+				continue
+			}
+			h.collectPodMetrics(metricsCtx, pod)
 		}
 
 		// Process regular containers
 		for _, container := range pod.Status.ContainerStatuses {
-			containerKey := h.getContainerKey(pod.Namespace, pod.Name, container.Name)
+			containerKey := h.getContainerKey(string(pod.UID), pod.Namespace, pod.Name, container.Name)
 			currentState := h.getContainerState(&container)
 			currentStates[containerKey] = currentState
 
 			// Always log running containers
 			if currentState == ContainerStateRunning {
-				entry := h.createLogEntry(pod, &container, false)
+				entry := h.createLogEntryWithContext(ctx, pod, &container, false)
 				entry.Timestamp = listTime
 				entries = append(entries, entry)
 			}
 
 			// Log newly terminated containers
 			if h.isNewlyTerminated(containerKey, currentState, &container) {
-				entry := h.createLogEntry(pod, &container, false)
+				entry := h.createLogEntryWithContext(ctx, pod, &container, false)
 				entry.Timestamp = listTime
 				entries = append(entries, entry)
 			}
@@ -118,20 +145,20 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 
 		// Process init containers
 		for _, container := range pod.Status.InitContainerStatuses {
-			containerKey := h.getContainerKey(pod.Namespace, pod.Name, container.Name)
+			containerKey := h.getContainerKey(string(pod.UID), pod.Namespace, pod.Name, container.Name)
 			currentState := h.getContainerState(&container)
 			currentStates[containerKey] = currentState
 
 			// Always log running init containers
 			if currentState == ContainerStateRunning {
-				entry := h.createLogEntry(pod, &container, true)
+				entry := h.createLogEntryWithContext(ctx, pod, &container, true)
 				entry.Timestamp = listTime
 				entries = append(entries, entry)
 			}
 
 			// Log newly terminated init containers
 			if h.isNewlyTerminated(containerKey, currentState, &container) {
-				entry := h.createLogEntry(pod, &container, true)
+				entry := h.createLogEntryWithContext(ctx, pod, &container, true)
 				entry.Timestamp = listTime
 				entries = append(entries, entry)
 			}
@@ -148,8 +175,15 @@ func (h *ContainerHandler) processPods(ctx context.Context, pods []any, namespac
 	return entries, nil
 }
 
-// getContainerKey creates a unique key for a container
-func (h *ContainerHandler) getContainerKey(namespace, podName, containerName string) string {
+// getContainerKey creates a state-cache key that remains unique when a pod is
+// recreated with the same namespace and name.
+func (h *ContainerHandler) getContainerKey(podUID, namespace, podName, containerName string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", podUID, namespace, podName, containerName)
+}
+
+// getMetricsCacheKey creates a key for metrics-server responses, which do not
+// expose the pod UID.
+func (h *ContainerHandler) getMetricsCacheKey(namespace, podName, containerName string) string {
 	return fmt.Sprintf("%s/%s/%s", namespace, podName, containerName)
 }
 
@@ -194,9 +228,9 @@ func (h *ContainerHandler) isNewlyTerminated(containerKey, currentState string, 
 
 	// Get previous state from cache
 	if previousStateObj, exists := h.stateCache.Get(containerKey); exists {
-		previousState := previousStateObj.(string)
+		previousState, ok := previousStateObj.(string)
 		// Log if it transitioned from running to terminated
-		return previousState == ContainerStateRunning
+		return ok && previousState == ContainerStateRunning
 	}
 
 	// Log if we haven't seen this container before (first time seeing a terminated container)
@@ -210,6 +244,10 @@ func (h *ContainerHandler) updateStateCache(currentStates map[string]any) {
 
 // createLogEntry creates a ContainerData from a pod and container status
 func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.ContainerStatus, isInitContainer bool) types.ContainerData {
+	return h.createLogEntryWithContext(context.Background(), pod, container, isInitContainer)
+}
+
+func (h *ContainerHandler) createLogEntryWithContext(ctx context.Context, pod *corev1.Pod, container *corev1.ContainerStatus, isInitContainer bool) types.ContainerData {
 	// Handle nil container case
 	if container == nil {
 		return types.ContainerData{
@@ -224,7 +262,7 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 			},
 			PodName:    pod.Name,
 			NodeName:   pod.Spec.NodeName,
-			NodeLabels: h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName),
+			NodeLabels: h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName),
 			State:      ContainerStateUnknown,
 		}
 	}
@@ -368,7 +406,7 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 		PodName:                 pod.Name,
 		PodUID:                  string(pod.UID),
 		NodeName:                pod.Spec.NodeName,
-		NodeLabels:              h.nodeLabelPromoter.labelsForNode(pod.Spec.NodeName),
+		NodeLabels:              h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName),
 		Ready:                   &container.Ready,
 		RestartCount:            container.RestartCount,
 		State:                   state,
@@ -401,6 +439,21 @@ func (h *ContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.Con
 	return data
 }
 
+func (h *ContainerHandler) collectPodMetrics(ctx context.Context, pod *corev1.Pod) {
+	if h.metricsClient == nil || ctx.Err() != nil {
+		return
+	}
+	podMetrics, err := h.metricsClient.MetricsV1beta1().PodMetricses(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return
+	}
+	for index := range podMetrics.Containers {
+		containerMetrics := &podMetrics.Containers[index]
+		key := h.getMetricsCacheKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
+		h.metricsCache.Add(key, containerMetrics)
+	}
+}
+
 // collectAllMetrics retrieves all pod metrics for the given namespaces and stores them in cache
 func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []string) {
 	if h.metricsClient == nil {
@@ -422,7 +475,7 @@ func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []s
 		for _, podMetrics := range podMetricsList.Items {
 			for i := range podMetrics.Containers {
 				containerMetrics := &podMetrics.Containers[i]
-				key := h.getContainerKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
+				key := h.getMetricsCacheKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
 				h.metricsCache.Add(key, containerMetrics)
 			}
 		}
@@ -442,7 +495,7 @@ func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []s
 			for _, podMetrics := range podMetricsList.Items {
 				for i := range podMetrics.Containers {
 					containerMetrics := &podMetrics.Containers[i]
-					key := h.getContainerKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
+					key := h.getMetricsCacheKey(podMetrics.Namespace, podMetrics.Name, containerMetrics.Name)
 					h.metricsCache.Add(key, containerMetrics)
 				}
 			}
@@ -452,7 +505,7 @@ func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []s
 
 // getContainerUsageFromCache retrieves CPU and memory usage for a container from the metrics cache
 func (h *ContainerHandler) getContainerUsageFromCache(namespace, podName, containerName string) (cpuMillicore *int64, memoryBytes *int64) {
-	key := h.getContainerKey(namespace, podName, containerName)
+	key := h.getMetricsCacheKey(namespace, podName, containerName)
 
 	if obj, exists := h.metricsCache.Get(key); exists {
 		if containerMetrics, ok := obj.(*metricsv1beta1.ContainerMetrics); ok {

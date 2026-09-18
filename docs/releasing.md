@@ -24,6 +24,7 @@ All branches run the full validation and native multi-architecture builds, incre
 | Tag `v1.2.3-beta.1`  | `v1.2.3-beta.1`, `sha-<commit>`        |
 
 The `v1.2` and `v1` tags are "floating" - they always point to the latest patch/minor release in that series. Prerelease tags (containing `-`) do not update floating tags.
+The `latest` image tag is updated only by `main`; stable and prerelease tags never move it.
 
 ### Helm Charts
 

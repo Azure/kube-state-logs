@@ -83,7 +83,125 @@ jobs:
           version: v3.20.0
 
       - name: Lint Helm chart
-        run: helm lint charts/kube-state-logs
+        run: |
+          set -euo pipefail
+          chart=charts/kube-state-logs
+          helm lint "$chart"
+          helm lint "$chart" --set deploymentMode=advanced
+          helm lint "$chart" --set deploymentMode=advanced --set daemonset.useKubeletAPI=false
+
+          for mode in simple advanced; do
+            for resources in all daemonset,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding; do
+              rendered=$(helm template routing "$chart" \
+                --set deploymentMode="$mode" \
+                --set "config.resources={$resources}" \
+                --set config.enableADXMonAnnotations=true \
+                --set config.adxMonLogDestination=test)
+              for snapshot in DaemonSet PriorityClass RuntimeClass ValidatingAdmissionPolicy ValidatingAdmissionPolicyBinding; do
+                resource=$(printf '%s' "$snapshot" | tr '[:upper:]' '[:lower:]')
+                expected="ResourceType:$resource:test:Kube${snapshot}Snapshot"
+                if [[ "$rendered" != *"$expected"* ]]; then
+                  echo "Missing ADX route in $mode mode with resources=$resources: $expected" >&2
+                  exit 1
+                fi
+              done
+            done
+          done
+
+          for mode in simple advanced; do
+            for resources in all crd; do
+              rendered=$(helm template crd-routing "$chart" \
+                --set deploymentMode="$mode" \
+                --set "config.resources={$resources}" \
+                --set config.enableADXMonAnnotations=true \
+                --set config.adxMonLogDestination=test \
+                --set-string 'config.crdConfigs[0].apiVersion=example.com/v1' \
+                --set-string 'config.crdConfigs[0].resource=widgets' \
+                --set-string 'config.crdConfigs[0].kind=Widget')
+              if [[ "$rendered" == *"ResourceType:crd:"* || "$rendered" != *"ResourceType:widget:test:KubeWidgetSnapshot"* ]]; then
+                echo "Invalid CRD routing in $mode mode with resources=$resources" >&2
+                exit 1
+              fi
+              if [[ "$resources" == crd && "$rendered" != *"--resources=crd"* ]]; then
+                echo "CRD collector selection was lost in $mode mode" >&2
+                exit 1
+              fi
+            done
+          done
+
+          helm template advanced "$chart" \
+            --set deploymentMode=advanced \
+            --set config.enableADXMonAnnotations=true \
+            --set config.adxMonLogDestination=test \
+            --set 'env[0].name=EXTRA' \
+            --set-string 'env[0].value=present' \
+            --set 'config.resourceConfigs={pod:30s:labels=app=api,container:10s}' \
+            > /tmp/kube-state-logs-advanced.yaml
+          grep -q -- '- --kubelet-insecure-skip-verify=false' /tmp/kube-state-logs-advanced.yaml
+          grep -q 'resources: \["nodes/pods"\]' /tmp/kube-state-logs-advanced.yaml
+          grep -q 'resources: \["nodes/stats"\]' /tmp/kube-state-logs-advanced.yaml
+          if grep -q 'resources: \["nodes/proxy"\]' /tmp/kube-state-logs-advanced.yaml; then
+            echo "Kubelet node role unexpectedly grants execution-capable nodes/proxy access" >&2
+            exit 1
+          fi
+          grep -q 'ResourceType:init_container:test:KubeContainerSnapshot' /tmp/kube-state-logs-advanced.yaml
+          if awk '/^kind: ClusterRole$/{in_role=1; next} in_role && /^  name: advanced-kube-state-logs-node$/{node_role=1} node_role{print} node_role && /^---$/{exit}' /tmp/kube-state-logs-advanced.yaml | grep -q 'metrics.k8s.io'; then
+            echo "Kubelet node role unexpectedly grants metrics-server access" >&2
+            exit 1
+          fi
+          if [[ $(grep -c '^        kubernetes.io/os: linux$' /tmp/kube-state-logs-advanced.yaml) -ne 2 ]]; then
+            echo "Advanced workloads are not both restricted to Linux nodes" >&2
+            exit 1
+          fi
+
+          helm template linux-only "$chart" \
+            --set deploymentMode=advanced \
+            --set-string 'nodeSelector.kubernetes\.io/os=windows' \
+            --set-string 'nodeSelector.agentpool=test' \
+            > /tmp/kube-state-logs-linux-only.yaml
+          [[ $(grep -c '^        kubernetes.io/os: windows$' /tmp/kube-state-logs-linux-only.yaml) -eq 2 ]]
+          [[ $(grep -c '^        agentpool: test$' /tmp/kube-state-logs-linux-only.yaml) -eq 2 ]]
+          if grep -q 'kubernetes.io/os: linux' /tmp/kube-state-logs-linux-only.yaml; then
+            echo "The default Linux node selector was not overridden" >&2
+            exit 1
+          fi
+
+          helm template endpoints-simple "$chart" \
+            --set 'config.resources={endpoints}' \
+            > /tmp/kube-state-logs-endpoints-simple.yaml
+          grep -q 'resources: \["endpoints"\]' /tmp/kube-state-logs-endpoints-simple.yaml
+
+          helm template endpoints-advanced "$chart" \
+            --set deploymentMode=advanced \
+            --set 'config.resources={endpoints}' \
+            > /tmp/kube-state-logs-endpoints-advanced.yaml
+          grep -q 'resources: \["endpoints"\]' /tmp/kube-state-logs-endpoints-advanced.yaml
+
+          helm template service-only "$chart" \
+            --set 'config.resources={service}' \
+            > /tmp/kube-state-logs-service-only.yaml
+          grep -q 'resources: \["endpoints"\]' /tmp/kube-state-logs-service-only.yaml
+
+          helm template crd-no-fields "$chart" \
+            --set 'config.resources={crd}' \
+            --set-string 'config.crdConfigs[0].apiVersion=example.com/v1' \
+            --set-string 'config.crdConfigs[0].resource=widgets' \
+            > /tmp/kube-state-logs-crd-no-fields.yaml
+          grep -q -- '- "--crd-configs=example.com/v1:widgets:"' /tmp/kube-state-logs-crd-no-fields.yaml
+
+          helm template cluster-only "$chart" \
+            --set deploymentMode=advanced \
+            --set 'config.resources={deployment,node}' \
+            > /tmp/kube-state-logs-cluster-only.yaml
+          if grep -q '^kind: DaemonSet$' /tmp/kube-state-logs-cluster-only.yaml; then
+            echo "DaemonSet rendered without pod or container resources" >&2
+            exit 1
+          fi
+
+          if helm template invalid "$chart" --set deploymentMode=invalid >/dev/null 2>&1; then
+            echo "Invalid deploymentMode was accepted" >&2
+            exit 1
+          fi
 
       - name: Set up yq
         working-directory: ${{ runner.temp }}
@@ -93,6 +211,20 @@ jobs:
 
       - name: Test chart publishing
         run: bash .github/scripts/publishing_test.sh
+
+      - name: Test Docker metadata configuration
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/ci.yml
+          action='docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051'
+          for job in docker docker-merge; do
+            flavor=$(yq ".jobs.\"$job\".steps[] | select(.uses == \"$action\") | .with.flavor" "$workflow")
+            tags=$(yq ".jobs.\"$job\".steps[] | select(.uses == \"$action\") | .with.tags" "$workflow")
+            [[ "$flavor" == "latest=false" ]]
+            grep -Fqx 'type=semver,pattern={{version}},prefix=v' <<< "$tags"
+            grep -Fqx 'type=semver,pattern={{major}}.{{minor}},prefix=v' <<< "$tags"
+            grep -Fqx 'type=semver,pattern={{major}},prefix=v' <<< "$tags"
+          done
 
   docker:
     name: Build Docker Image (${{ matrix.platform }})
@@ -133,12 +265,13 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ needs.branch-metadata.outputs.image_tag }},enable=${{ needs.branch-metadata.outputs.image_tag != '' }}
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern=v{{major}}
+            type=semver,pattern={{version}},prefix=v
+            type=semver,pattern={{major}}.{{minor}},prefix=v
+            type=semver,pattern={{major}},prefix=v
             type=sha
 
       - name: Build and push by digest
@@ -215,12 +348,13 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ needs.branch-metadata.outputs.image_tag }},enable=${{ needs.branch-metadata.outputs.image_tag != '' }}
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern=v{{major}}
+            type=semver,pattern={{version}},prefix=v
+            type=semver,pattern={{major}}.{{minor}},prefix=v
+            type=semver,pattern={{major}},prefix=v
             type=sha
 
       - name: Check current branch head

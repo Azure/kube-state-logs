@@ -147,7 +147,7 @@ config:
     - "container:promote-node-labels=topology.kubernetes.io/zone|kubernetes.io/arch"
 ```
 
-The configured labels are emitted in the `NodeLabels` object. Pod and container configurations are independent, and the interval may be omitted as shown above. Promotion is disabled unless `node` and the corresponding `pod` or `container` resource are both enabled. Labels that are not present on a pod's assigned node are omitted.
+The configured labels are emitted in the `NodeLabels` object. Pod and container configurations are independent, and the interval may be omitted as shown above. In simple mode, promotion requires both `node` and the corresponding `pod` or `container` resource. In advanced mode, each node collector retrieves only its own node, so a cluster-wide `node` snapshot is not required. Unscheduled pods have no assigned node and therefore no promoted labels. Labels absent from the assigned node are omitted.
 
 ### Custom Resource Configuration
 
@@ -169,7 +169,10 @@ config:
 
 ### Container Resource
 
-The `container` resource provides container-level metrics and requires the Kubernetes Metrics Server to be installed for CPU/memory usage data. Configure which environment variables to capture:
+The `container` resource provides container-level metrics. Advanced mode reads
+CPU/memory usage from the kubelet by default; simple mode and advanced informer
+mode require Kubernetes Metrics Server. Configure which environment variables
+to capture:
 
 ```yaml
 config:
@@ -177,6 +180,32 @@ config:
     - "GOMAXPROCS"
     - "MY_APP_VERSION"
 ```
+
+### Pod and Container Node Filtering
+
+In [advanced deployment mode](../README.md#deployment-modes), `pod` and `container` resources support node-based filtering. The DaemonSet pods use the `--node` flag to filter pods to only those scheduled on the local node. The Deployment uses `--track-unscheduled-pods` to capture pods not yet assigned to a node.
+
+This reduces API server load on large clusters by distributing pod watching across nodes.
+
+By default, each node collector uses local kubelet `/pods` and `/stats/summary`
+polling instead of a pod informer and metrics-server query. Namespace filters,
+pod/container resource selectors, per-resource intervals, environment-variable
+filters, and promoted node labels continue to apply. Kubelet polling is snapshot
+based and can miss objects whose entire lifetime falls between collection
+intervals. Set `daemonset.useKubeletAPI: false` to use node-filtered Kubernetes
+informers and metrics-server instead. Kubelet mode requires the
+`KubeletFineGrainedAuthz` feature, which is enabled by default in Kubernetes 1.33
+and later, for least-privilege access to `/pods`; use informer mode on older
+clusters or when that feature is disabled. Scheduled pod and container coverage
+is limited to nodes where the DaemonSet runs, so a custom `nodeSelector`
+intentionally narrows collection coverage.
+
+Kubelet pod snapshots omit the kubelet-local `kubernetes.io/config.seen`
+(first observation time) and `kubernetes.io/config.source` (configuration source)
+annotations. Filtering affects log output only, not the shared snapshot or the
+pod itself. Static/mirror pod annotations `kubernetes.io/config.hash` and
+`kubernetes.io/config.mirror` are retained because they can also exist on
+API-server mirror pods. Other pod fields and informer-mode output are unchanged.
 
 ### Secret Resource
 
