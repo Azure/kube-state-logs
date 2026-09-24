@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -18,8 +18,8 @@ import (
 	"k8s.io/client-go/informers"
 )
 
-func createTestValidatingAdmissionPolicyBinding(name string) *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding {
-	return &admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{
+func createTestValidatingAdmissionPolicyBinding(name string) *admissionregistrationv1.ValidatingAdmissionPolicyBinding {
+	return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
@@ -30,12 +30,12 @@ func createTestValidatingAdmissionPolicyBinding(name string) *admissionregistrat
 			},
 			CreationTimestamp: metav1.Now(),
 		},
-		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicyBindingSpec{
+		Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{
 			PolicyName: "test-policy",
-			ParamRef: &admissionregistrationv1beta1.ParamRef{
+			ParamRef: &admissionregistrationv1.ParamRef{
 				Name: "test-param",
 			},
-			MatchResources: &admissionregistrationv1beta1.MatchResources{
+			MatchResources: &admissionregistrationv1.MatchResources{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"namespace-label": "namespace-value",
@@ -47,9 +47,9 @@ func createTestValidatingAdmissionPolicyBinding(name string) *admissionregistrat
 					},
 				},
 			},
-			ValidationActions: []admissionregistrationv1beta1.ValidationAction{
-				admissionregistrationv1beta1.Deny,
-				admissionregistrationv1beta1.Warn,
+			ValidationActions: []admissionregistrationv1.ValidationAction{
+				admissionregistrationv1.Deny,
+				admissionregistrationv1.Warn,
 			},
 		},
 	}
@@ -70,7 +70,7 @@ func TestValidatingAdmissionPolicyBindingHandler_SetupInformer(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	factory := cache.NewSharedIndexInformer(
 		&cache.ListWatch{},
-		&admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{},
+		&admissionregistrationv1.ValidatingAdmissionPolicyBinding{},
 		0,
 		cache.Indexers{},
 	)
@@ -109,7 +109,7 @@ func TestValidatingAdmissionPolicyBindingHandler_Collect(t *testing.T) {
 	// Create informer and add test object
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{},
-		&admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{},
+		&admissionregistrationv1.ValidatingAdmissionPolicyBinding{},
 		0,
 		cache.Indexers{},
 	)
@@ -165,7 +165,7 @@ func TestValidatingAdmissionPolicyBindingHandler_Collect_Empty(t *testing.T) {
 	// Create empty informer
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{},
-		&admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{},
+		&admissionregistrationv1.ValidatingAdmissionPolicyBinding{},
 		0,
 		cache.Indexers{},
 	)
@@ -190,7 +190,7 @@ func TestValidatingAdmissionPolicyBindingHandler_Collect_InvalidObject(t *testin
 	// Create informer
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{},
-		&admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding{},
+		&admissionregistrationv1.ValidatingAdmissionPolicyBinding{},
 		0,
 		cache.Indexers{},
 	)
