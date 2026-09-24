@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 
@@ -31,7 +31,7 @@ func NewValidatingAdmissionPolicyHandler(client kubernetes.Interface) *Validatin
 // SetupInformer sets up the validatingadmissionpolicy informer
 func (h *ValidatingAdmissionPolicyHandler) SetupInformer(factory informers.SharedInformerFactory, logger interfaces.Logger, resyncPeriod time.Duration) error {
 	// Create validatingadmissionpolicy informer
-	informer := factory.Admissionregistration().V1beta1().ValidatingAdmissionPolicies().Informer()
+	informer := factory.Admissionregistration().V1().ValidatingAdmissionPolicies().Informer()
 	h.SetupBaseInformer(informer, logger)
 	return nil
 }
@@ -45,7 +45,7 @@ func (h *ValidatingAdmissionPolicyHandler) Collect(ctx context.Context, namespac
 	listTime := time.Now()
 
 	for _, obj := range policies {
-		policy, ok := obj.(*admissionregistrationv1beta1.ValidatingAdmissionPolicy)
+		policy, ok := obj.(*admissionregistrationv1.ValidatingAdmissionPolicy)
 		if !ok {
 			continue
 		}
@@ -63,7 +63,7 @@ func (h *ValidatingAdmissionPolicyHandler) Collect(ctx context.Context, namespac
 }
 
 // createLogEntry creates a ValidatingAdmissionPolicyData from a validatingadmissionpolicy
-func (h *ValidatingAdmissionPolicyHandler) createLogEntry(policy *admissionregistrationv1beta1.ValidatingAdmissionPolicy) types.ValidatingAdmissionPolicyData {
+func (h *ValidatingAdmissionPolicyHandler) createLogEntry(policy *admissionregistrationv1.ValidatingAdmissionPolicy) types.ValidatingAdmissionPolicyData {
 	createdTimestamp := utils.ExtractCreationTimestamp(policy)
 
 	failurePolicy := ""

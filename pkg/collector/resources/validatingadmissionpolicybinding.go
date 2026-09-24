@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 
@@ -31,7 +31,7 @@ func NewValidatingAdmissionPolicyBindingHandler(client kubernetes.Interface) *Va
 // SetupInformer sets up the validatingadmissionpolicybinding informer
 func (h *ValidatingAdmissionPolicyBindingHandler) SetupInformer(factory informers.SharedInformerFactory, logger interfaces.Logger, resyncPeriod time.Duration) error {
 	// Create validatingadmissionpolicybinding informer
-	informer := factory.Admissionregistration().V1beta1().ValidatingAdmissionPolicyBindings().Informer()
+	informer := factory.Admissionregistration().V1().ValidatingAdmissionPolicyBindings().Informer()
 	h.SetupBaseInformer(informer, logger)
 	return nil
 }
@@ -45,7 +45,7 @@ func (h *ValidatingAdmissionPolicyBindingHandler) Collect(ctx context.Context, n
 	listTime := time.Now()
 
 	for _, obj := range bindings {
-		binding, ok := obj.(*admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding)
+		binding, ok := obj.(*admissionregistrationv1.ValidatingAdmissionPolicyBinding)
 		if !ok {
 			continue
 		}
@@ -67,7 +67,7 @@ func (h *ValidatingAdmissionPolicyBindingHandler) Collect(ctx context.Context, n
 }
 
 // createLogEntry creates a ValidatingAdmissionPolicyBindingData from a validatingadmissionpolicybinding
-func (h *ValidatingAdmissionPolicyBindingHandler) createLogEntry(binding *admissionregistrationv1beta1.ValidatingAdmissionPolicyBinding) types.ValidatingAdmissionPolicyBindingData {
+func (h *ValidatingAdmissionPolicyBindingHandler) createLogEntry(binding *admissionregistrationv1.ValidatingAdmissionPolicyBinding) types.ValidatingAdmissionPolicyBindingData {
 	createdTimestamp := utils.ExtractCreationTimestamp(binding)
 
 	policyName := ""

@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -18,9 +18,9 @@ import (
 	"k8s.io/client-go/informers"
 )
 
-func createTestValidatingAdmissionPolicy(name string) *admissionregistrationv1beta1.ValidatingAdmissionPolicy {
-	failurePolicy := admissionregistrationv1beta1.Fail
-	return &admissionregistrationv1beta1.ValidatingAdmissionPolicy{
+func createTestValidatingAdmissionPolicy(name string) *admissionregistrationv1.ValidatingAdmissionPolicy {
+	failurePolicy := admissionregistrationv1.Fail
+	return &admissionregistrationv1.ValidatingAdmissionPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
@@ -31,13 +31,13 @@ func createTestValidatingAdmissionPolicy(name string) *admissionregistrationv1be
 			},
 			CreationTimestamp: metav1.Now(),
 		},
-		Spec: admissionregistrationv1beta1.ValidatingAdmissionPolicySpec{
+		Spec: admissionregistrationv1.ValidatingAdmissionPolicySpec{
 			FailurePolicy: &failurePolicy,
-			ParamKind: &admissionregistrationv1beta1.ParamKind{
+			ParamKind: &admissionregistrationv1.ParamKind{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 			},
-			MatchConstraints: &admissionregistrationv1beta1.MatchResources{
+			MatchConstraints: &admissionregistrationv1.MatchResources{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"namespace-label": "namespace-value",
@@ -49,35 +49,35 @@ func createTestValidatingAdmissionPolicy(name string) *admissionregistrationv1be
 					},
 				},
 			},
-			Validations: []admissionregistrationv1beta1.Validation{
+			Validations: []admissionregistrationv1.Validation{
 				{
 					Expression: "object.spec.replicas <= 5",
 					Message:    "Replicas must be <= 5",
 				},
 			},
-			AuditAnnotations: []admissionregistrationv1beta1.AuditAnnotation{
+			AuditAnnotations: []admissionregistrationv1.AuditAnnotation{
 				{
 					Key:             "replicas",
 					ValueExpression: "object.spec.replicas",
 				},
 			},
-			MatchConditions: []admissionregistrationv1beta1.MatchCondition{
+			MatchConditions: []admissionregistrationv1.MatchCondition{
 				{
 					Name:       "test-condition",
 					Expression: "object.spec.replicas > 0",
 				},
 			},
-			Variables: []admissionregistrationv1beta1.Variable{
+			Variables: []admissionregistrationv1.Variable{
 				{
 					Name:       "replicas",
 					Expression: "object.spec.replicas",
 				},
 			},
 		},
-		Status: admissionregistrationv1beta1.ValidatingAdmissionPolicyStatus{
+		Status: admissionregistrationv1.ValidatingAdmissionPolicyStatus{
 			ObservedGeneration: 1,
-			TypeChecking: &admissionregistrationv1beta1.TypeChecking{
-				ExpressionWarnings: []admissionregistrationv1beta1.ExpressionWarning{
+			TypeChecking: &admissionregistrationv1.TypeChecking{
+				ExpressionWarnings: []admissionregistrationv1.ExpressionWarning{
 					{
 						FieldRef: "spec.validations[0].expression",
 						Warning:  "Deprecated expression syntax",
@@ -103,7 +103,7 @@ func TestValidatingAdmissionPolicyHandler_SetupInformer(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	factory := cache.NewSharedIndexInformer(
 		&cache.ListWatch{},
-		&admissionregistrationv1beta1.ValidatingAdmissionPolicy{},
+		&admissionregistrationv1.ValidatingAdmissionPolicy{},
 		0,
 		cache.Indexers{},
 	)
@@ -142,7 +142,7 @@ func TestValidatingAdmissionPolicyHandler_Collect(t *testing.T) {
 	// Create informer and add test object
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{},
-		&admissionregistrationv1beta1.ValidatingAdmissionPolicy{},
+		&admissionregistrationv1.ValidatingAdmissionPolicy{},
 		0,
 		cache.Indexers{},
 	)
@@ -202,7 +202,7 @@ func TestValidatingAdmissionPolicyHandler_Collect_Empty(t *testing.T) {
 	// Create empty informer
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{},
-		&admissionregistrationv1beta1.ValidatingAdmissionPolicy{},
+		&admissionregistrationv1.ValidatingAdmissionPolicy{},
 		0,
 		cache.Indexers{},
 	)
@@ -227,7 +227,7 @@ func TestValidatingAdmissionPolicyHandler_Collect_InvalidObject(t *testing.T) {
 	// Create informer
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{},
-		&admissionregistrationv1beta1.ValidatingAdmissionPolicy{},
+		&admissionregistrationv1.ValidatingAdmissionPolicy{},
 		0,
 		cache.Indexers{},
 	)
