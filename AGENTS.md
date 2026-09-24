@@ -65,9 +65,15 @@ All resource handlers must implement the `interfaces.ResourceHandler` interface:
 ```go
 type ResourceHandler interface {
     SetupInformer(factory informers.SharedInformerFactory, logger Logger, resyncPeriod time.Duration) error
+    GetInformers() []cache.SharedIndexInformer
     Collect(ctx context.Context, namespaces []string) ([]any, error)
 }
 ```
+
+`GetInformers` must include dependency caches as well as the primary cache so
+the collector can handle built-in informer failures consistently. Handlers
+embedding `utils.BaseHandler` inherit the primary-cache implementation;
+override it to include any dependency informers.
 
 ### Data Types Pattern
 

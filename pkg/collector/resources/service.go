@@ -43,6 +43,11 @@ func (h *ServiceHandler) SetupInformer(factory informers.SharedInformerFactory, 
 	return nil
 }
 
+// GetInformers includes the endpoints cache used to count service endpoints.
+func (h *ServiceHandler) GetInformers() []cache.SharedIndexInformer {
+	return []cache.SharedIndexInformer{h.GetInformer(), h.endpointsInformer}
+}
+
 // Collect gathers service metrics from the cluster (uses cache)
 func (h *ServiceHandler) Collect(ctx context.Context, namespaces []string) ([]any, error) {
 	var entries []any

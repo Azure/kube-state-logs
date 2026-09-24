@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,12 +16,12 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -48,6 +49,12 @@ type Collector struct {
 	kubeletSource   kubelet.SnapshotSource
 	stopCh          chan struct{}
 	wg              sync.WaitGroup
+	ready           atomic.Bool
+}
+
+// Ready reports whether all enabled built-in caches have synced and collection is running.
+func (c *Collector) Ready() bool {
+	return c.ready.Load()
 }
 
 // validateTickerInterval ensures the interval is positive to prevent time.NewTicker panics
@@ -323,12 +330,6 @@ func (c *Collector) registerCRDHandlers() {
 			Resource: crdConfig.Resource,
 		}
 
-		if !c.isCRDAvailable(gvr) {
-			handlerKey := fmt.Sprintf("%s.%s", crdConfig.Resource, group)
-			klog.Warningf("Skipping CRD handler for %s (%s): API resource not found", handlerKey, crdConfig.APIVersion)
-			continue
-		}
-
 		// Create CRD handler
 		handler := resources.NewCRDHandler(c.dynClient, gvr, crdConfig.Resource, crdConfig.CustomFields)
 		handlerKey := fmt.Sprintf("%s.%s", crdConfig.Resource, group)
@@ -338,44 +339,33 @@ func (c *Collector) registerCRDHandlers() {
 	}
 }
 
-// isCRDAvailable verifies that the CRD's API resource is discoverable before wiring informers for it
-func (c *Collector) isCRDAvailable(gvr schema.GroupVersionResource) bool {
-	groupVersion := fmt.Sprintf("%s/%s", gvr.Group, gvr.Version)
-	apiResourceList, err := c.client.Discovery().ServerResourcesForGroupVersion(groupVersion)
-	if err != nil {
-		if discovery.IsGroupDiscoveryFailedError(err) {
-			if failed, ok := err.(*discovery.ErrGroupDiscoveryFailed); ok {
-				for gv, groupErr := range failed.Groups {
-					if apierrors.IsNotFound(groupErr) {
-						klog.Warningf("Discovery reports %s as not found: %v", gv, groupErr)
-						return false
-					}
-				}
-			}
-			klog.Warningf("Discovery failed for %s: %v (treating as transient)", groupVersion, err)
-			return true
-		}
-		if apierrors.IsNotFound(err) {
-			klog.Warningf("API group/version %s not found: %v", groupVersion, err)
-			return false
-		}
-		klog.Warningf("Unable to discover resources for %s: %v (continuing)", groupVersion, err)
-		return true
-	}
-
-	for _, resource := range apiResourceList.APIResources {
-		if resource.Name == gvr.Resource {
-			return true
-		}
-	}
-
-	klog.Warningf("Resource %s not listed in discovery for %s/%s", gvr.Resource, gvr.Group, gvr.Version)
-	return false
-}
-
 // Run starts the informers and collection loop
-func (c *Collector) Run(ctx context.Context) error {
+func (c *Collector) Run(ctx context.Context) (runErr error) {
+	parentCtx := ctx
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer func() {
+		c.ready.Store(false)
+		// Informer failures are fatal, but caller cancellation is a graceful shutdown.
+		if runErr == nil && parentCtx.Err() == nil {
+			runErr = context.Cause(ctx)
+		}
+		cancel(nil)
+	}()
+	c.ready.Store(false)
+	if ctx.Err() != nil {
+		return nil
+	}
+
 	klog.Info("Starting kube-state-logs with individual tickers...")
+
+	for _, resourceConfig := range c.config.ResourceConfigs {
+		if resourceConfig.Name == "crd" || c.shouldUseKubeletHandler(resourceConfig.Name) {
+			continue
+		}
+		if _, exists := c.handlers[resourceConfig.Name]; !exists {
+			return fmt.Errorf("unknown resource type: %s", resourceConfig.Name)
+		}
+	}
 
 	// Setup informers for each configured resource type (excluding "crd" which is handled separately)
 	for _, resourceType := range c.config.Resources {
@@ -392,8 +382,7 @@ func (c *Collector) Run(ctx context.Context) error {
 
 		handler, exists := c.handlers[resourceType]
 		if !exists {
-			klog.Warningf("No handler found for resource type: %s", resourceType)
-			continue
+			return fmt.Errorf("unknown resource type: %s", resourceType)
 		}
 
 		// Use the podFactory for pod and container handlers (supports node filtering)
@@ -404,16 +393,25 @@ func (c *Collector) Run(ctx context.Context) error {
 
 		// Setup informer with no resync period
 		if err := handler.SetupInformer(factoryToUse, c.logger, 0); err != nil {
-			klog.Errorf("Failed to setup informer for %s: %v", resourceType, err)
-			continue
+			return fmt.Errorf("failed to setup informer for %s: %w", resourceType, err)
+		}
+		for _, informer := range handler.GetInformers() {
+			if err := informer.SetWatchErrorHandlerWithContext(func(watchCtx context.Context, reflector *cache.Reflector, err error) {
+				cache.DefaultWatchErrorHandler(watchCtx, reflector, err)
+				if apierrors.IsNotFound(err) || apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err) {
+					c.ready.Store(false)
+					cancel(fmt.Errorf("required informer for %s failed: %w", resourceType, err))
+				}
+			}); err != nil {
+				return fmt.Errorf("failed to set informer error handler for %s: %w", resourceType, err)
+			}
 		}
 	}
 
 	// Setup informers for CRD resources
 	for handlerKey, crdHandler := range c.crdHandlers {
 		if err := crdHandler.SetupInformer(c.dynFactory, c.logger, 0); err != nil {
-			klog.Errorf("Failed to setup CRD informer for %s: %v", handlerKey, err)
-			continue
+			return fmt.Errorf("failed to setup CRD informer for %s: %w", handlerKey, err)
 		}
 	}
 
@@ -431,8 +429,8 @@ func (c *Collector) Run(ctx context.Context) error {
 	}
 	c.dynFactory.Start(c.stopCh)
 
-	// Wait for all informers to sync
-	klog.Info("Waiting for informers to sync...")
+	// CRDs sync independently; only built-in caches gate readiness.
+	klog.Info("Waiting for built-in informers to sync...")
 	synced := c.factory.WaitForCacheSync(c.stopCh)
 	if ctx.Err() != nil {
 		return nil
@@ -457,28 +455,15 @@ func (c *Collector) Run(ctx context.Context) error {
 		}
 	}
 
-	// Wait for dynamic informers to sync too
-	if len(c.crdHandlers) > 0 {
-		klog.Info("Waiting for dynamic informers to sync...")
-		dynSynced := c.dynFactory.WaitForCacheSync(c.stopCh)
-		if ctx.Err() != nil {
-			return nil
-		}
-		for resourceType, isSynced := range dynSynced {
-			if !isSynced {
-				klog.Warningf("Failed to sync dynamic informer for %v", resourceType)
-				// Don't fail completely, just warn and continue
-			}
-		}
-	}
-
-	klog.Info("All informers synced successfully")
+	klog.Info("All built-in informers synced successfully")
 
 	// Start individual tickers for each resource
 	c.startResourceTickers(ctx)
+	c.ready.Store(true)
 
 	// Wait for context cancellation
 	<-ctx.Done()
+	c.ready.Store(false)
 	klog.Info("Shutting down...")
 
 	// Wait for all goroutines to finish
@@ -614,28 +599,26 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 
 	if shouldStartCRDTickers {
 		for handlerKey, crdHandler := range c.crdHandlers {
-			klog.Infof("Starting ticker for CRD %s with interval %v", handlerKey, c.config.LogInterval)
+			c.wg.Go(func() {
+				klog.Infof("Waiting for CRD informer %s to sync...", handlerKey)
+				if !cache.WaitForCacheSync(ctx.Done(), crdHandler.HasSynced) {
+					return
+				}
 
-			c.wg.Add(1)
-			go func(name string, tickerInterval time.Duration, h *resources.CRDHandler) {
-				defer c.wg.Done()
-
-				// Validate ticker interval to prevent panics
-				validatedInterval := validateTickerInterval(tickerInterval, name)
-				ticker := time.NewTicker(validatedInterval)
-				defer ticker.Stop()
+				klog.Infof("Starting ticker for CRD %s with interval %v", handlerKey, c.config.LogInterval)
+				ticker := time.Tick(validateTickerInterval(c.config.LogInterval, handlerKey))
 
 				for {
 					select {
 					case <-ctx.Done():
 						return
-					case <-ticker.C:
-						if err := c.collectAndLogCRD(ctx, name, h); err != nil {
-							klog.Errorf("CRD collection failed for %s: %v", name, err)
+					case <-ticker:
+						if err := c.collectAndLogCRD(ctx, handlerKey, crdHandler); err != nil {
+							klog.Errorf("CRD collection failed for %s: %v", handlerKey, err)
 						}
 					}
 				}
-			}(handlerKey, c.config.LogInterval, crdHandler)
+			})
 		}
 	}
 }

@@ -135,16 +135,27 @@ func TestCRDHandler(t *testing.T) {
 				gvr: "MyResourceList",
 			}, objects...)
 			handler := NewCRDHandler(client, gvr, "myresource", tt.customFields)
+			if handler.HasSynced() {
+				t.Fatal("CRD cache is synced before informer setup")
+			}
 			factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 			err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.informer.HasSynced) {
+			if handler.HasSynced() {
+				t.Fatal("CRD cache is synced before informer startup")
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			t.Cleanup(func() {
+				cancel()
+				factory.Shutdown()
+			})
+			factory.Start(ctx.Done())
+			if !cache.WaitForCacheSync(ctx.Done(), handler.HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.namespaces)
+			entries, err := handler.Collect(ctx, tt.namespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}

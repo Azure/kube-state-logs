@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/azure/kube-state-logs/pkg/interfaces"
 	"github.com/azure/kube-state-logs/pkg/types"
@@ -54,6 +55,15 @@ func (h *PodHandler) SetupInformer(factory informers.SharedInformerFactory, logg
 	h.SetupBaseInformer(informer, logger)
 	h.nodeLabelPromoter.setupInformer(factory)
 	return nil
+}
+
+// GetInformers includes the node cache when node label promotion requires it.
+func (h *PodHandler) GetInformers() []cache.SharedIndexInformer {
+	informers := h.BaseHandler.GetInformers()
+	if h.nodeLabelPromoter.informer != nil {
+		informers = append(informers, h.nodeLabelPromoter.informer)
+	}
+	return informers
 }
 
 // Collect gathers pod metrics from the cluster (uses cache)
