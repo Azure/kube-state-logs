@@ -49,6 +49,11 @@ func (h *CRDHandler) SetupInformer(factory dynamicinformer.DynamicSharedInformer
 	return nil
 }
 
+// HasSynced reports whether the CRD cache has completed its initial synchronization.
+func (h *CRDHandler) HasSynced() bool {
+	return h.informer != nil && h.informer.HasSynced()
+}
+
 // Collect gathers CRD metrics from the cluster (uses cache)
 func (h *CRDHandler) Collect(ctx context.Context, namespaces []string) ([]any, error) {
 	var entries []any

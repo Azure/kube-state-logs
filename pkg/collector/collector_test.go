@@ -11,6 +11,7 @@ import (
 	"github.com/azure/kube-state-logs/pkg/collector/resources"
 	"github.com/azure/kube-state-logs/pkg/config"
 	"github.com/azure/kube-state-logs/pkg/interfaces"
+	"github.com/azure/kube-state-logs/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -19,10 +20,12 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
-type pendingPodHandler struct{}
+type pendingPodHandler struct {
+	utils.BaseHandler
+}
 
-func (pendingPodHandler) SetupInformer(factory informers.SharedInformerFactory, _ interfaces.Logger, _ time.Duration) error {
-	factory.Core().V1().Pods().Informer()
+func (h *pendingPodHandler) SetupInformer(factory informers.SharedInformerFactory, logger interfaces.Logger, _ time.Duration) error {
+	h.SetupBaseInformer(factory.Core().V1().Pods().Informer(), logger)
 	return nil
 }
 
@@ -51,6 +54,9 @@ func TestRunReturnsNilOnContextCancellation(t *testing.T) {
 	if err := collector.Run(ctx); err != nil {
 		t.Fatalf("Run() returned an error for expected cancellation: %v", err)
 	}
+	if collector.Ready() {
+		t.Fatal("collector is ready after cancellation")
+	}
 }
 
 func TestRunReturnsNilWhenCanceledDuringInformerSync(t *testing.T) {
@@ -67,7 +73,7 @@ func TestRunReturnsNilWhenCanceledDuringInformerSync(t *testing.T) {
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	collector := &Collector{
 		config:      &config.Config{Resources: []string{"pod"}},
-		handlers:    map[string]interfaces.ResourceHandler{"pod": pendingPodHandler{}},
+		handlers:    map[string]interfaces.ResourceHandler{"pod": &pendingPodHandler{}},
 		crdHandlers: make(map[string]*resources.CRDHandler),
 		factory:     factory,
 		podFactory:  factory,
@@ -85,6 +91,9 @@ func TestRunReturnsNilWhenCanceledDuringInformerSync(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("pod informer did not start listing")
 	}
+	if collector.Ready() {
+		t.Fatal("collector is ready while cache sync is pending")
+	}
 	cancel()
 
 	select {
@@ -94,6 +103,9 @@ func TestRunReturnsNilWhenCanceledDuringInformerSync(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Run() did not stop after cancellation")
+	}
+	if collector.Ready() {
+		t.Fatal("collector is ready after cancellation during cache sync")
 	}
 }
 

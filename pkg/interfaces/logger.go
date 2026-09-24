@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"k8s.io/client-go/informers"
+	"k8s.io/client-go/tools/cache"
 )
 
 // Logger interface defines the logging contract
@@ -18,6 +19,7 @@ type Logger interface {
 // ResourceHandler defines the interface for resource-specific collectors
 type ResourceHandler interface {
 	SetupInformer(factory informers.SharedInformerFactory, logger Logger, resyncPeriod time.Duration) error
+	GetInformers() []cache.SharedIndexInformer
 	Collect(ctx context.Context, namespaces []string) ([]any, error)
 }
 

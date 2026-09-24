@@ -91,6 +91,31 @@ jobs:
           helm lint "$chart" --set deploymentMode=advanced --set daemonset.useKubeletAPI=false
 
           for mode in simple advanced; do
+            for kubelet in true false; do
+              rendered=$(helm template probes "$chart" \
+                --set deploymentMode="$mode" \
+                --set daemonset.useKubeletAPI="$kubelet")
+              expected=1
+              if [[ "$mode" == advanced ]]; then
+                expected=2
+              fi
+              for field in \
+                '          readinessProbe:' '              path: /readyz' '            periodSeconds: 5' '            failureThreshold: 1' \
+                '          livenessProbe:' '              path: /livez' '            periodSeconds: 10' '            timeoutSeconds: 5' '            failureThreshold: 3' \
+                '              port: readiness' '              containerPort: 8080'; do
+                expectedCount="$expected"
+                if [[ "$field" == '              port: readiness' ]]; then
+                  expectedCount=$((expected * 2))
+                fi
+                if [[ $(grep -c "^${field}$" <<< "$rendered") -ne "$expectedCount" ]]; then
+                  echo "Missing health probe configuration in $mode mode (kubelet=$kubelet): $field" >&2
+                  exit 1
+                fi
+              done
+            done
+          done
+
+          for mode in simple advanced; do
             for resources in all daemonset,priorityclass,runtimeclass,validatingadmissionpolicy,validatingadmissionpolicybinding; do
               rendered=$(helm template routing "$chart" \
                 --set deploymentMode="$mode" \

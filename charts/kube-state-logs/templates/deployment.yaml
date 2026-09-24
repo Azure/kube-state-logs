@@ -69,6 +69,22 @@ spec:
             runAsUser: 1000
           image: "{{ .Values.image.registry }}/{{ .Values.image.org }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: readiness
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: readiness
+            periodSeconds: 5
+            failureThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: readiness
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           command: ["/kube-state-logs"]
           args:
             - --log-interval={{ .Values.config.logInterval }}

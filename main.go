@@ -5,7 +5,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -106,9 +110,57 @@ func main() {
 	}()
 
 	// Start the collector
-	if err := collector.Run(ctx); err != nil {
+	if err := runCollector(ctx, collector, ":8080"); err != nil {
 		klog.Fatalf("Collector failed: %v", err)
 	}
 
 	klog.Info("kube-state-logs stopped")
+}
+
+func runCollector(ctx context.Context, c *collector.Collector, address string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return fmt.Errorf("failed to listen for health probes: %w", err)
+	}
+	server := &http.Server{
+		Handler:           probeHandler(ctx, c.Ready),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	serverErrors := make(chan error, 1)
+	go func() {
+		err := server.Serve(listener)
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		} else if err != nil {
+			err = fmt.Errorf("health probe server failed: %w", err)
+		}
+		serverErrors <- err
+		cancel()
+	}()
+
+	runErr := c.Run(ctx)
+	cancel()
+	closeErr := server.Close()
+	if closeErr != nil {
+		closeErr = fmt.Errorf("failed to close health probe server: %w", closeErr)
+	}
+	return errors.Join(runErr, closeErr, <-serverErrors)
+}
+
+func probeHandler(ctx context.Context, ready func() bool) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if ctx.Err() != nil || !ready() {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	return mux
 }

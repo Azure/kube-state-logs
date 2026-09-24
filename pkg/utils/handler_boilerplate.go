@@ -37,6 +37,11 @@ func (h *BaseHandler) SetupBaseInformer(informer cache.SharedIndexInformer, logg
 	h.logger = logger
 }
 
+// GetInformers returns the primary informer. Handlers with dependencies override this method.
+func (h *BaseHandler) GetInformers() []cache.SharedIndexInformer {
+	return []cache.SharedIndexInformer{h.informer}
+}
+
 // GetClient returns the Kubernetes client
 func (h *BaseHandler) GetClient() kubernetes.Interface {
 	return h.client

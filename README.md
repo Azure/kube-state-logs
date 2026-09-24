@@ -149,6 +149,48 @@ We welcome contributions to add support for other log collection solutions (e.g.
 
 kube-state-logs watches Kubernetes resources and logs their current state as JSON at the configured interval. Each resource type gets one log line per object, per interval.
 
+### Readiness
+
+The HTTP endpoint `GET /readyz` on port `8080` returns `503 Service Unavailable`
+until all enabled built-in informer caches have completed their initial
+synchronization, including node-filtered/unscheduled pod caches and dependency
+caches. It returns `200 OK` once collection loops start, and becomes unready on
+shutdown. Built-in informer setup or cache-sync failures prevent readiness.
+
+Both the Deployment and DaemonSet use this endpoint as a readiness probe.
+Unknown built-in resource names are fatal configuration errors. Built-in
+informer list/watch requests that return `404 Not Found`, `401 Unauthorized`,
+or `403 Forbidden` terminate the collector with an error, including failures
+in dependency caches (such as Endpoints for Services). Transient API failures
+continue to retry.
+
+Configured CRDs are not skipped when their APIs are missing at startup.
+Their informers keep retrying with client-go backoff, including after
+`404`, `401`, or `403` responses, so installing the CRD or fixing its RBAC
+allows synchronization without restarting the collector. CRD caches do not
+gate readiness: each CRD starts collecting after its own cache synchronizes,
+without blocking built-in resources or other CRDs. A CRD-only collector becomes
+ready even when none of its configured CRDs are available yet.
+Readiness probe failures themselves do not restart the container.
+This checks initial cache synchronization, not ongoing watch freshness.
+Kubelet-only collectors have no informer caches to wait for, so they become
+ready when their collection loops start; the probe does not check kubelet
+polling success.
+
+### Liveness
+
+The HTTP endpoint `GET /livez` on port `8080` returns `200 OK` whenever the
+health probe server can respond, including while caches are synchronizing or
+the collector is shutting down. It does not check cache readiness, Kubernetes
+API availability, CRD availability, or kubelet polling success, so those
+conditions do not trigger liveness restarts. It checks HTTP responsiveness,
+not progress of individual collection loops.
+
+Both the Deployment and DaemonSet probe `/livez` every 10 seconds, with a
+5-second timeout. Three consecutive failures trigger a container restart.
+The probe server starts before informer synchronization, so slow cache
+initialization does not require a startup probe.
+
 ## Example Output
 
 A deployment logged as JSON (truncated for brevity):

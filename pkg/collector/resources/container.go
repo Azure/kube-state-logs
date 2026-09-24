@@ -76,6 +76,15 @@ func (h *ContainerHandler) SetupInformer(factory informers.SharedInformerFactory
 	return nil
 }
 
+// GetInformers includes the node cache when node label promotion requires it.
+func (h *ContainerHandler) GetInformers() []cache.SharedIndexInformer {
+	informers := h.BaseHandler.GetInformers()
+	if h.nodeLabelPromoter.informer != nil {
+		informers = append(informers, h.nodeLabelPromoter.informer)
+	}
+	return informers
+}
+
 // Collect gathers container metrics from the cluster (uses cache)
 func (h *ContainerHandler) Collect(ctx context.Context, namespaces []string) ([]any, error) {
 	// Get all pods from the cache
