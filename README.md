@@ -83,8 +83,37 @@ clusters, or clusters where that feature is disabled, set
 be verified, and only on trusted cluster networks.
 
 Both chart workloads select Linux nodes by default because the published image
-supports Linux only. Override `nodeSelector.kubernetes.io/os` when using a
-custom image that supports another operating system.
+supports Linux only. Override the workload's `nodeSelector.kubernetes.io/os`
+when using a custom image that supports another operating system.
+
+Use each workload's `nodeSelector` and `tolerations` for separate placement:
+
+```yaml
+deploymentMode: advanced
+deployment:
+  nodeSelector:
+    kubernetes.io/os: linux
+    agentpool: system
+  tolerations: []
+daemonset:
+  nodeSelector:
+    kubernetes.io/os: linux
+    agentpool: workers
+  tolerations:
+    - operator: Exists
+```
+
+The selectors are independent, and each defaults to `kubernetes.io/os: linux`.
+`deployment.nodeSelector` applies in both simple and advanced modes;
+`daemonset.nodeSelector` applies only to the advanced-mode DaemonSet.
+
+Tolerations are also independent: `deployment.tolerations` defaults to `[]`,
+while `daemonset.tolerations` defaults to `[{operator: Exists}]` to tolerate all
+taints. Setting a custom list replaces that workload's defaults; setting `[]`
+omits chart-configured tolerations. Kubernetes still adds its built-in DaemonSet
+tolerations. Move existing top-level `tolerations` into the relevant workload
+blocks, retaining `operator: Exists` in the DaemonSet list if you want to keep
+its previous tolerate-all behavior.
 
 Kubelet responses are limited to 10 MiB each to reduce buffering and decoding
 memory pressure on node collectors. Larger responses are rejected; use
@@ -93,7 +122,7 @@ not a total memory bound: decoded objects and cached snapshots also consume
 memory, so size the DaemonSet memory limit for the workload.
 
 In advanced mode, scheduled pod and container snapshots are collected only on
-nodes where the DaemonSet runs. A custom `nodeSelector` intentionally limits
+nodes where the DaemonSet runs. A custom `daemonset.nodeSelector` intentionally limits
 that coverage; when pod collection is enabled, the cluster Deployment continues
 to collect unscheduled pods.
 
