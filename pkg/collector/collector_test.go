@@ -11,6 +11,7 @@ import (
 	"github.com/azure/kube-state-logs/pkg/collector/resources"
 	"github.com/azure/kube-state-logs/pkg/config"
 	"github.com/azure/kube-state-logs/pkg/interfaces"
+	"github.com/azure/kube-state-logs/pkg/kubelet"
 	"github.com/azure/kube-state-logs/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic/dynamicinformer"
@@ -48,7 +49,7 @@ func TestRunReturnsNilOnContextCancellation(t *testing.T) {
 		stopCh:      make(chan struct{}),
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	if err := collector.Run(ctx); err != nil {
@@ -60,7 +61,8 @@ func TestRunReturnsNilOnContextCancellation(t *testing.T) {
 }
 
 func TestRunReturnsNilWhenCanceledDuringInformerSync(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 	client := fake.NewSimpleClientset()
 	listStarted := make(chan struct{})
 	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
@@ -106,6 +108,73 @@ func TestRunReturnsNilWhenCanceledDuringInformerSync(t *testing.T) {
 	}
 	if collector.Ready() {
 		t.Fatal("collector is ready after cancellation during cache sync")
+	}
+}
+
+type tickerTestHandler struct {
+	pendingPodHandler
+	name  string
+	calls chan<- string
+}
+
+func (h *tickerTestHandler) Collect(ctx context.Context, _ []string) ([]any, error) {
+	select {
+	case h.calls <- h.name:
+	case <-ctx.Done():
+	}
+	return nil, nil
+}
+
+func TestResourceTickersCollectEachHandlerAndStop(t *testing.T) {
+	for _, mode := range []string{"informer", "kubelet"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			calls := make(chan string, 8)
+			c := &Collector{
+				config: &config.Config{
+					Resources:   []string{"pod", "container"},
+					LogInterval: time.Millisecond,
+				},
+				handlers:        make(map[string]interfaces.ResourceHandler),
+				kubeletHandlers: make(map[string]interfaces.KubeletHandler),
+			}
+			if mode == "kubelet" {
+				c.kubeletClient = &kubelet.Client{}
+			}
+			for _, name := range c.config.Resources {
+				handler := &tickerTestHandler{name: name, calls: calls}
+				c.handlers[name] = handler
+				c.kubeletHandlers[name] = handler
+			}
+
+			c.startResourceTickers(ctx)
+			done := make(chan struct{})
+			go func() {
+				c.wg.Wait()
+				close(done)
+			}()
+			t.Cleanup(func() {
+				cancel()
+				select {
+				case <-done:
+				case <-time.After(time.Second):
+					t.Error("resource tickers did not stop after cancellation")
+				}
+			})
+
+			seen := make(map[string]bool)
+			deadline := time.After(time.Second)
+			for len(seen) < len(c.config.Resources) {
+				select {
+				case name := <-calls:
+					seen[name] = true
+				case <-deadline:
+					t.Fatalf("not all resource handlers collected: %v", seen)
+				}
+			}
+			cancel()
+		})
 	}
 }
 

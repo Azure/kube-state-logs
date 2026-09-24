@@ -67,19 +67,13 @@ func (h *RuntimeClassHandler) createLogEntry(rc *nodev1.RuntimeClass) types.Runt
 	// Create data structure
 	// See: https://kubernetes.io/docs/concepts/containers/runtime-class/
 	data := types.RuntimeClassData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "runtimeclass",
-				Name:             utils.ExtractName(rc),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(rc),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(rc),
-				Annotations: utils.ExtractAnnotations(rc),
-			},
-		},
-		Handler: rc.Handler,
+		Timestamp:        time.Now(),
+		ResourceType:     "runtimeclass",
+		Name:             utils.ExtractName(rc),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(rc),
+		Labels:           utils.ExtractLabels(rc),
+		Annotations:      utils.ExtractAnnotations(rc),
+		Handler:          rc.Handler,
 	}
 
 	return data

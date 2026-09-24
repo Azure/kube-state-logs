@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -26,13 +26,11 @@ func TestNetworkPolicyHandler(t *testing.T) {
 	protocolUDP := corev1.ProtocolUDP
 
 	np1 := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "web-policy",
-			Namespace:         "default",
-			Labels:            map[string]string{"app": "web"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "web-policy",
+		Namespace:         "default",
+		Labels:            map[string]string{"app": "web"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "web"},
@@ -89,11 +87,9 @@ func TestNetworkPolicyHandler(t *testing.T) {
 	}
 
 	np2 := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "api-policy",
-			Namespace:         "kube-system",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "api-policy",
+		Namespace:         "kube-system",
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "api"},
@@ -116,11 +112,9 @@ func TestNetworkPolicyHandler(t *testing.T) {
 	}
 
 	npDefault := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "default-policy",
-			Namespace:         "default",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "default-policy",
+		Namespace:         "default",
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "default"},
@@ -136,7 +130,7 @@ func TestNetworkPolicyHandler(t *testing.T) {
 		namespaces      []string
 		expectedCount   int
 		expectedNames   []string
-		expectedFields  map[string]interface{}
+		expectedFields  map[string]any
 	}{
 		{
 			name:            "collect all network policies",
@@ -158,7 +152,7 @@ func TestNetworkPolicyHandler(t *testing.T) {
 			namespaces:      []string{},
 			expectedCount:   1,
 			expectedNames:   []string{"web-policy"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"policy_types": []string{"Ingress", "Egress"},
 			},
 		},
@@ -184,11 +178,11 @@ func TestNetworkPolicyHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.namespaces)
+			entries, err := handler.Collect(t.Context(), tt.namespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -204,13 +198,7 @@ func TestNetworkPolicyHandler(t *testing.T) {
 				entryNames[i] = networkPolicyData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find network policy with name %s", expectedName)
 				}
@@ -274,11 +262,11 @@ func TestNetworkPolicyHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -297,7 +285,7 @@ func TestNetworkPolicyHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -310,18 +298,16 @@ func TestNetworkPolicyHandler_InvalidObject(t *testing.T) {
 func createTestNetworkPolicy(name, namespace string) *networkingv1.NetworkPolicy {
 	protocolTCP := corev1.ProtocolTCP
 	networkPolicy := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test network policy",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test network policy",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": name},
@@ -359,10 +345,10 @@ func TestNetworkPolicyHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

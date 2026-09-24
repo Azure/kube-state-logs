@@ -185,12 +185,10 @@ func (h *KubeletContainerHandler) getContainerUsage(podUID, containerName string
 		return nil, nil
 	}
 	if containerStats.CPU != nil && containerStats.CPU.UsageNanoCores != nil {
-		value := kubelet.NanoCoresToMilliCores(*containerStats.CPU.UsageNanoCores)
-		cpuMillicore = &value
+		cpuMillicore = new(kubelet.NanoCoresToMilliCores(*containerStats.CPU.UsageNanoCores))
 	}
 	if containerStats.Memory != nil && containerStats.Memory.WorkingSetBytes != nil {
-		value := int64(*containerStats.Memory.WorkingSetBytes)
-		memoryBytes = &value
+		memoryBytes = new(int64(*containerStats.Memory.WorkingSetBytes))
 	}
 	return cpuMillicore, memoryBytes
 }
@@ -198,19 +196,15 @@ func (h *KubeletContainerHandler) getContainerUsage(podUID, containerName string
 func (h *KubeletContainerHandler) createLogEntry(pod *corev1.Pod, container *corev1.ContainerStatus, isInitContainer bool, statsLookup map[string]*kubelet.ContainerStats, nodeLabels map[string]string) types.ContainerData {
 	if container == nil {
 		return types.ContainerData{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     h.getResourceType(isInitContainer),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
-				},
-				Namespace: pod.Namespace,
-			},
-			PodName:    pod.Name,
-			PodUID:     string(pod.UID),
-			NodeName:   pod.Spec.NodeName,
-			NodeLabels: nodeLabels,
-			State:      ContainerStateUnknown,
+			Timestamp:        time.Now(),
+			ResourceType:     h.getResourceType(isInitContainer),
+			CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
+			Namespace:        pod.Namespace,
+			PodName:          pod.Name,
+			PodUID:           string(pod.UID),
+			NodeName:         pod.Spec.NodeName,
+			NodeLabels:       nodeLabels,
+			State:            ContainerStateUnknown,
 		}
 	}
 
@@ -226,18 +220,18 @@ func (h *KubeletContainerHandler) createLogEntry(pod *corev1.Pod, container *cor
 
 	if container.State.Running != nil {
 		state = ContainerStateRunning
-		stateRunning = boolPointer(true)
+		stateRunning = new(true)
 		if !container.State.Running.StartedAt.IsZero() {
 			startedAt = &container.State.Running.StartedAt.Time
 		}
 	} else if container.State.Waiting != nil {
 		state = ContainerStateWaiting
-		stateWaiting = boolPointer(true)
+		stateWaiting = new(true)
 		waitingReason = container.State.Waiting.Reason
 		waitingMessage = container.State.Waiting.Message
 	} else if container.State.Terminated != nil {
 		state = ContainerStateTerminated
-		stateTerminated = boolPointer(true)
+		stateTerminated = new(true)
 		exitCode = container.State.Terminated.ExitCode
 		reason = container.State.Terminated.Reason
 		message = container.State.Terminated.Message
@@ -298,15 +292,11 @@ func (h *KubeletContainerHandler) createLogEntry(pod *corev1.Pod, container *cor
 	}
 
 	return types.ContainerData{
-		NamespacedMetadata: types.NamespacedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     h.getResourceType(isInitContainer),
-				Name:             container.Name,
-				CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
-			},
-			Namespace: pod.Namespace,
-		},
+		Timestamp:               time.Now(),
+		ResourceType:            h.getResourceType(isInitContainer),
+		Name:                    container.Name,
+		CreatedTimestamp:        utils.ExtractCreationTimestamp(pod),
+		Namespace:               pod.Namespace,
 		Image:                   container.Image,
 		ImagePullPolicy:         imagePullPolicy,
 		ImageID:                 container.ImageID,
@@ -343,8 +333,4 @@ func (h *KubeletContainerHandler) createLogEntry(pod *corev1.Pod, container *cor
 		UsageMemoryBytes:        memoryUsage,
 		EnvironmentVariables:    environmentVariables,
 	}
-}
-
-func boolPointer(value bool) *bool {
-	return &value
 }

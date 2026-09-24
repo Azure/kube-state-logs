@@ -5,6 +5,8 @@ package resources
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -70,40 +72,24 @@ func (h *ConfigMapHandler) Collect(ctx context.Context, namespaces []string) ([]
 
 // createLogEntry creates a ConfigMapData from a configmap
 func (h *ConfigMapHandler) createLogEntry(configmap *corev1.ConfigMap) types.ConfigMapData {
-	var dataKeys []string
-	for key := range configmap.Data {
-		dataKeys = append(dataKeys, key)
-	}
-	for key := range configmap.BinaryData {
-		dataKeys = append(dataKeys, key)
-	}
+	dataKeys := slices.Collect(maps.Keys(configmap.Data))
+	dataKeys = slices.AppendSeq(dataKeys, maps.Keys(configmap.BinaryData))
 
 	var dataValues map[string]string
 	if h.includeValues && len(configmap.Data) > 0 {
-		dataValues = make(map[string]string, len(configmap.Data))
-		for key, value := range configmap.Data {
-			dataValues[key] = value
-		}
+		dataValues = maps.Clone(configmap.Data)
 	}
 
 	data := types.ConfigMapData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "configmap",
-					Name:             utils.ExtractName(configmap),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(configmap),
-				},
-				Namespace: utils.ExtractNamespace(configmap),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(configmap),
-				Annotations: utils.ExtractAnnotations(configmap),
-			},
-		},
-		DataKeys: dataKeys,
-		Data:     dataValues,
+		Timestamp:        time.Now(),
+		ResourceType:     "configmap",
+		Name:             utils.ExtractName(configmap),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(configmap),
+		Namespace:        utils.ExtractNamespace(configmap),
+		Labels:           utils.ExtractLabels(configmap),
+		Annotations:      utils.ExtractAnnotations(configmap),
+		DataKeys:         dataKeys,
+		Data:             dataValues,
 	}
 
 	return data

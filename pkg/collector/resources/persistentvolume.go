@@ -146,18 +146,12 @@ func (h *PersistentVolumeHandler) createLogEntry(pv *corev1.PersistentVolume) ty
 
 	// Create data structure
 	data := types.PersistentVolumeData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "persistentvolume",
-				Name:             utils.ExtractName(pv),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(pv),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(pv),
-				Annotations: utils.ExtractAnnotations(pv),
-			},
-		},
+		Timestamp:              time.Now(),
+		ResourceType:           "persistentvolume",
+		Name:                   utils.ExtractName(pv),
+		CreatedTimestamp:       utils.ExtractCreationTimestamp(pv),
+		Labels:                 utils.ExtractLabels(pv),
+		Annotations:            utils.ExtractAnnotations(pv),
 		CapacityBytes:          capacityBytes,
 		AccessModes:            accessModes[0],
 		ReclaimPolicy:          reclaimPolicy,

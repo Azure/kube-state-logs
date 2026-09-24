@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,12 +20,10 @@ import (
 func createTestVolumeAttachment(name string) *storagev1.VolumeAttachment {
 	pvName := "test-pv"
 	return &storagev1.VolumeAttachment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              name,
-			Labels:            map[string]string{"app": "test-app"},
-			Annotations:       map[string]string{"test-annotation": "test-value"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              name,
+		Labels:            map[string]string{"app": "test-app"},
+		Annotations:       map[string]string{"test-annotation": "test-value"},
+		CreationTimestamp: metav1.Now(),
 		Spec: storagev1.VolumeAttachmentSpec{
 			Attacher: "test-attacher",
 			Source: storagev1.VolumeAttachmentSource{
@@ -97,7 +94,7 @@ func TestVolumeAttachmentHandler_Collect(t *testing.T) {
 	handler.SetupBaseInformer(informer, logger)
 	store := informer.GetStore()
 	store.Add(va)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -151,7 +148,7 @@ func TestVolumeAttachmentHandler_Collect_Empty(t *testing.T) {
 		cache.Indexers{},
 	)
 	handler.SetupBaseInformer(informer, logger)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -173,7 +170,7 @@ func TestVolumeAttachmentHandler_Collect_InvalidObject(t *testing.T) {
 	handler.SetupBaseInformer(informer, logger)
 	store := informer.GetStore()
 	store.Add(&corev1.Pod{})
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

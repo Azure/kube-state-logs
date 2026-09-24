@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -21,17 +20,15 @@ import (
 // createTestClusterRole creates a test cluster role with various configurations
 func createTestClusterRole(name string) *rbacv1.ClusterRole {
 	clusterRole := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test cluster role",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name: name,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test cluster role",
+		},
+		CreationTimestamp: metav1.Now(),
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"apps"},
@@ -103,11 +100,11 @@ func TestClusterRoleHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all cluster roles
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

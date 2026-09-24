@@ -4,7 +4,8 @@
 package resources
 
 import (
-	"context"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -21,18 +22,16 @@ import (
 // createTestConfigMap creates a test configmap with various configurations
 func createTestConfigMap(name, namespace string) *corev1.ConfigMap {
 	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test configmap",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test configmap",
+		},
+		CreationTimestamp: metav1.Now(),
 		Data: map[string]string{
 			"config.yaml": "apiVersion: v1\nkind: Config",
 			"settings.json": `{
@@ -98,11 +97,11 @@ func TestConfigMapHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all configmaps
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -202,6 +201,63 @@ func TestConfigMapHandler_createLogEntry_WithValues(t *testing.T) {
 	}
 }
 
+func TestConfigMapHandler_createLogEntry_DataCopyIsolation(t *testing.T) {
+	handler := NewConfigMapHandler(fake.NewSimpleClientset(), true)
+	configMap := &corev1.ConfigMap{
+		Data: map[string]string{"source": "original", "snapshot": "original"},
+	}
+	entry := handler.createLogEntry(configMap)
+	if !maps.Equal(entry.Data, configMap.Data) {
+		t.Fatalf("Data = %v, want %v", entry.Data, configMap.Data)
+	}
+
+	configMap.Data["source"] = "changed"
+	if entry.Data["source"] != "original" {
+		t.Error("Changing ConfigMap data changed the snapshot")
+	}
+
+	entry.Data["snapshot"] = "changed"
+	if configMap.Data["snapshot"] != "original" {
+		t.Error("Changing snapshot data changed the ConfigMap")
+	}
+}
+
+func TestConfigMapHandler_createLogEntry_EmptyData(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		configMap corev1.ConfigMap
+		wantKeys  []string
+	}{
+		{name: "nil maps"},
+		{
+			name: "empty maps",
+			configMap: corev1.ConfigMap{
+				Data:       map[string]string{},
+				BinaryData: map[string][]byte{},
+			},
+		},
+		{
+			name: "binary data only",
+			configMap: corev1.ConfigMap{
+				Data:       map[string]string{},
+				BinaryData: map[string][]byte{"binary.dat": {0x01}},
+			},
+			wantKeys: []string{"binary.dat"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := NewConfigMapHandler(fake.NewSimpleClientset(), true)
+			entry := handler.createLogEntry(&tt.configMap)
+			if entry.Data != nil {
+				t.Errorf("Data = %v, want nil", entry.Data)
+			}
+			if !slices.Equal(entry.DataKeys, tt.wantKeys) || (entry.DataKeys == nil) != (tt.wantKeys == nil) {
+				t.Errorf("DataKeys = %#v, want %#v", entry.DataKeys, tt.wantKeys)
+			}
+		})
+	}
+}
+
 func TestConfigMapHandler_createLogEntry_WithOwnerReference(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	handler := NewConfigMapHandler(client, false)
@@ -243,10 +299,10 @@ func TestConfigMapHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test multiple namespace filtering
 	entries, err := handler.Collect(ctx, []string{"default", "monitoring"})

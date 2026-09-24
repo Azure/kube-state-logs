@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
-	"k8s.io/utils/pointer"
 
 	"github.com/azure/kube-state-logs/pkg/interfaces"
 	"github.com/azure/kube-state-logs/pkg/types"
@@ -260,19 +259,15 @@ func (h *ContainerHandler) createLogEntryWithContext(ctx context.Context, pod *c
 	// Handle nil container case
 	if container == nil {
 		return types.ContainerData{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     h.getResourceType(isInitContainer),
-					Name:             "",
-					CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
-				},
-				Namespace: pod.Namespace,
-			},
-			PodName:    pod.Name,
-			NodeName:   pod.Spec.NodeName,
-			NodeLabels: h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName),
-			State:      ContainerStateUnknown,
+			Timestamp:        time.Now(),
+			ResourceType:     h.getResourceType(isInitContainer),
+			Name:             "",
+			CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
+			Namespace:        pod.Namespace,
+			PodName:          pod.Name,
+			NodeName:         pod.Spec.NodeName,
+			NodeLabels:       h.nodeLabelPromoter.labelsForNode(ctx, pod.Spec.NodeName),
+			State:            ContainerStateUnknown,
 		}
 	}
 
@@ -290,21 +285,18 @@ func (h *ContainerHandler) createLogEntryWithContext(ctx context.Context, pod *c
 
 	if container.State.Running != nil {
 		state = ContainerStateRunning
-		val := true
-		stateRunning = &val
+		stateRunning = new(true)
 		if !container.State.Running.StartedAt.IsZero() {
 			startedAt = &container.State.Running.StartedAt.Time
 		}
 	} else if container.State.Waiting != nil {
 		state = ContainerStateWaiting
-		val := true
-		stateWaiting = &val
+		stateWaiting = new(true)
 		waitingReason = string(container.State.Waiting.Reason)
 		waitingMessage = container.State.Waiting.Message
 	} else if container.State.Terminated != nil {
 		state = ContainerStateTerminated
-		val := true
-		stateTerminated = &val
+		stateTerminated = new(true)
 		exitCode = container.State.Terminated.ExitCode
 		reason = string(container.State.Terminated.Reason)
 		message = container.State.Terminated.Message
@@ -399,15 +391,11 @@ func (h *ContainerHandler) createLogEntryWithContext(ctx context.Context, pod *c
 	}
 
 	data := types.ContainerData{
-		NamespacedMetadata: types.NamespacedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     h.getResourceType(isInitContainer),
-				Name:             container.Name,
-				CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
-			},
-			Namespace: pod.Namespace,
-		},
+		Timestamp:               time.Now(),
+		ResourceType:            h.getResourceType(isInitContainer),
+		Name:                    container.Name,
+		CreatedTimestamp:        utils.ExtractCreationTimestamp(pod),
+		Namespace:               pod.Namespace,
 		Image:                   container.Image,
 		ImagePullPolicy:         imagePullPolicy,
 		ImageID:                 container.ImageID,
@@ -473,7 +461,7 @@ func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []s
 	if len(namespaces) == 0 {
 		// Get metrics from all namespaces by using empty namespace (cluster-wide)
 		podMetricsList, err := h.metricsClient.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{
-			TimeoutSeconds: pointer.Int64(30),
+			TimeoutSeconds: new(int64(30)),
 		})
 		if err != nil {
 			// If cluster-wide query fails, return
@@ -493,7 +481,7 @@ func (h *ContainerHandler) collectAllMetrics(ctx context.Context, namespaces []s
 		for _, namespace := range namespaces {
 			// Get all pod metrics for this namespace
 			podMetricsList, err := h.metricsClient.MetricsV1beta1().PodMetricses(namespace).List(ctx, metav1.ListOptions{
-				TimeoutSeconds: pointer.Int64(30),
+				TimeoutSeconds: new(int64(30)),
 			})
 			if err != nil {
 				// Continue with other namespaces if this one fails
@@ -520,14 +508,12 @@ func (h *ContainerHandler) getContainerUsageFromCache(namespace, podName, contai
 		if containerMetrics, ok := obj.(*metricsv1beta1.ContainerMetrics); ok {
 			// Extract CPU usage in millicores
 			if cpuQuantity, exists := containerMetrics.Usage[corev1.ResourceCPU]; exists {
-				cpuMillicoreVal := cpuQuantity.MilliValue()
-				cpuMillicore = &cpuMillicoreVal
+				cpuMillicore = new(cpuQuantity.MilliValue())
 			}
 
 			// Extract memory usage in bytes
 			if memQuantity, exists := containerMetrics.Usage[corev1.ResourceMemory]; exists {
-				memoryBytesVal := memQuantity.Value()
-				memoryBytes = &memoryBytesVal
+				memoryBytes = new(memQuantity.Value())
 			}
 		}
 	}

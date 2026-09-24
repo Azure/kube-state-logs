@@ -85,20 +85,14 @@ func (h *ClusterRoleBindingHandler) createLogEntry(binding *rbacv1.ClusterRoleBi
 
 	// Create data structure
 	data := types.ClusterRoleBindingData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "clusterrolebinding",
-				Name:             utils.ExtractName(binding),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(binding),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(binding),
-				Annotations: utils.ExtractAnnotations(binding),
-			},
-		},
-		RoleRef:  roleRef,
-		Subjects: subjects,
+		Timestamp:        time.Now(),
+		ResourceType:     "clusterrolebinding",
+		Name:             utils.ExtractName(binding),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(binding),
+		Labels:           utils.ExtractLabels(binding),
+		Annotations:      utils.ExtractAnnotations(binding),
+		RoleRef:          roleRef,
+		Subjects:         subjects,
 	}
 
 	return data

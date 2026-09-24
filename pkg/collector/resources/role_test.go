@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -20,17 +19,15 @@ import (
 
 func createTestRole(name, namespace string) *rbacv1.Role {
 	return &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app": name,
-			},
-			Annotations: map[string]string{
-				"description": "test role",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app": name,
 		},
+		Annotations: map[string]string{
+			"description": "test role",
+		},
+		CreationTimestamp: metav1.Now(),
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
@@ -92,10 +89,10 @@ func TestRoleHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -128,9 +125,9 @@ func TestRoleHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	factory.WaitForCacheSync(context.Background().Done())
-	entries, err := handler.Collect(context.Background(), []string{})
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -149,9 +146,9 @@ func TestRoleHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	factory.Start(context.Background().Done())
-	factory.WaitForCacheSync(context.Background().Done())
-	entries, err := handler.Collect(context.Background(), []string{})
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}

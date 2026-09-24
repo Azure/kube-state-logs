@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -25,7 +24,7 @@ func TestKubeletContainerHandlerUsesLocalStatsAndPreservesFields(t *testing.T) {
 	cpu := uint64(250_000_000)
 	memory := uint64(128 * 1024 * 1024)
 	pod := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "team-a", UID: "uid-a", Labels: map[string]string{"app": "api"}},
+		Name: "pod-a", Namespace: "team-a", UID: "uid-a", Labels: map[string]string{"app": "api"},
 		Spec: corev1.PodSpec{
 			NodeName: "node-a",
 			Containers: []corev1.Container{{
@@ -55,14 +54,13 @@ func TestKubeletContainerHandlerUsesLocalStatsAndPreservesFields(t *testing.T) {
 			}},
 		}}},
 	}}
-	client := fake.NewSimpleClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{
+	client := fake.NewSimpleClientset(&corev1.Node{
 		Name:   "node-a",
-		Labels: map[string]string{"kubernetes.io/arch": "amd64"},
-	}})
+		Labels: map[string]string{"kubernetes.io/arch": "amd64"}})
 	handler := NewKubeletContainerHandler(source, client, "node-a", []string{"VISIBLE"}, "kubernetes.io/arch")
 	handler.SetSelectors(labels.SelectorFromSet(map[string]string{"app": "api"}), fields.Everything())
 
-	entries, err := handler.Collect(context.Background(), []string{"team-a"})
+	entries, err := handler.Collect(t.Context(), []string{"team-a"})
 	if err != nil {
 		t.Fatalf("Collect() error: %v", err)
 	}
@@ -99,7 +97,7 @@ func TestKubeletContainerHandlerCollectsInitContainers(t *testing.T) {
 			cpu, memory := uint64(125_500_000), uint64(32*1024*1024)
 			otherCPU := uint64(900_000_000)
 			pod := corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "team-a", UID: "uid-a"},
+				Name: "pod-a", Namespace: "team-a", UID: "uid-a",
 				Spec: corev1.PodSpec{
 					NodeName:   "node-a",
 					Containers: []corev1.Container{{Name: "app", ImagePullPolicy: corev1.PullNever}},
@@ -127,7 +125,7 @@ func TestKubeletContainerHandlerCollectsInitContainers(t *testing.T) {
 				}},
 			}}
 			handler := NewKubeletContainerHandler(source, nil, "node-a", []string{"VISIBLE"})
-			entries, err := handler.Collect(context.Background(), []string{"team-a"})
+			entries, err := handler.Collect(t.Context(), []string{"team-a"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -169,7 +167,7 @@ func TestKubeletContainerHandlerTracksRecreatedPodsByUID(t *testing.T) {
 	finished := metav1.NewTime(time.Now())
 	terminatedPod := func(uid string) corev1.Pod {
 		return corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "same-name", Namespace: "default", UID: k8stypes.UID(uid)},
+			Name: "same-name", Namespace: "default", UID: k8stypes.UID(uid),
 			Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{
 				Name: "app",
 				State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
@@ -191,18 +189,18 @@ func TestKubeletContainerHandlerAppliesNamespaceAndSelectors(t *testing.T) {
 	running := corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
 	pods := []corev1.Pod{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "included", Namespace: "team-a", UID: "uid-1", Labels: map[string]string{"app": "api"}},
-			Status:     corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{Name: "app", State: running}}},
+			Name: "included", Namespace: "team-a", UID: "uid-1", Labels: map[string]string{"app": "api"},
+			Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{Name: "app", State: running}}},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "excluded", Namespace: "team-b", UID: "uid-2", Labels: map[string]string{"app": "api"}},
-			Status:     corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{Name: "app", State: running}}},
+			Name: "excluded", Namespace: "team-b", UID: "uid-2", Labels: map[string]string{"app": "api"},
+			Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{Name: "app", State: running}}},
 		},
 	}
 	handler := NewKubeletContainerHandler(&staticSnapshotSource{snapshot: &kubelet.Snapshot{Pods: pods}}, nil, "", nil)
 	handler.SetSelectors(labels.SelectorFromSet(map[string]string{"app": "api"}), fields.Everything())
 
-	entries, err := handler.Collect(context.Background(), []string{"team-a"})
+	entries, err := handler.Collect(t.Context(), []string{"team-a"})
 	if err != nil {
 		t.Fatalf("Collect() error: %v", err)
 	}

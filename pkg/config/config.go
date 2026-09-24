@@ -94,11 +94,9 @@ func ParseResourceList(resources string) []string {
 		return []string{}
 	}
 
-	resourceList := strings.Split(resources, ",")
-
 	// Parse the list, checking for "all" and trimming whitespace
 	var result []string
-	for _, resource := range resourceList {
+	for resource := range strings.SplitSeq(resources, ",") {
 		resource = strings.TrimSpace(resource)
 		if resource == "all" {
 			return ParseResourceList(AllResourceList)
@@ -182,7 +180,7 @@ func ParseResourceConfigs(resourceConfigs string, defaultInterval time.Duration)
 				if value == "" {
 					return nil, fmt.Errorf("promote-node-labels cannot be empty for resource '%s'", resourceName)
 				}
-				for _, labelName := range strings.Split(value, "|") {
+				for labelName := range strings.SplitSeq(value, "|") {
 					labelName = strings.TrimSpace(labelName)
 					if labelName == "" {
 						return nil, fmt.Errorf("promote-node-labels contains an empty label for resource '%s'", resourceName)
@@ -256,9 +254,7 @@ func ParseCRDConfigs(crdConfigs string) []CRDConfig {
 	}
 
 	var configs []CRDConfig
-	pairs := strings.Split(crdConfigs, ",")
-
-	for _, pair := range pairs {
+	for pair := range strings.SplitSeq(crdConfigs, ",") {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
 			continue
@@ -317,9 +313,8 @@ func ParseContainerEnvVars(envvars string) []string {
 	if envvars == "" {
 		return []string{}
 	}
-	parts := strings.Split(envvars, ",")
 	var result []string
-	for _, p := range parts {
+	for p := range strings.SplitSeq(envvars, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			result = append(result, p)

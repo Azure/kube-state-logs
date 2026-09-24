@@ -83,22 +83,14 @@ func (h *RoleHandler) createLogEntry(role *rbacv1.Role) types.RoleData {
 
 	// Create data structure
 	data := types.RoleData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "role",
-					Name:             utils.ExtractName(role),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(role),
-				},
-				Namespace: utils.ExtractNamespace(role),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(role),
-				Annotations: utils.ExtractAnnotations(role),
-			},
-		},
-		Rules: rules,
+		Timestamp:        time.Now(),
+		ResourceType:     "role",
+		Name:             utils.ExtractName(role),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(role),
+		Namespace:        utils.ExtractNamespace(role),
+		Labels:           utils.ExtractLabels(role),
+		Annotations:      utils.ExtractAnnotations(role),
+		Rules:            rules,
 	}
 
 	return data

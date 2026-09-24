@@ -4,6 +4,7 @@
 package config
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -161,13 +162,7 @@ func TestParseResourceListAllExpandsSupportedResources(t *testing.T) {
 		t.Fatalf("all expanded to only %d resources", len(resources))
 	}
 	for _, required := range []string{"pod", "container", "node", "crd"} {
-		found := false
-		for _, resourceName := range resources {
-			if resourceName == required {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(resources, required)
 		if !found {
 			t.Errorf("all expansion is missing %q", required)
 		}

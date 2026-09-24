@@ -142,21 +142,13 @@ func (h *DeploymentHandler) createLogEntry(deployment *appsv1.Deployment) types.
 	}
 
 	return types.DeploymentData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "deployment",
-					Name:             utils.ExtractName(deployment),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(deployment),
-				},
-				Namespace: utils.ExtractNamespace(deployment),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(deployment),
-				Annotations: utils.ExtractAnnotations(deployment),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "deployment",
+		Name:             utils.ExtractName(deployment),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(deployment),
+		Namespace:        utils.ExtractNamespace(deployment),
+		Labels:           utils.ExtractLabels(deployment),
+		Annotations:      utils.ExtractAnnotations(deployment),
 		// Replica counts
 		DesiredReplicas:     desiredReplicas,
 		CurrentReplicas:     currentReplicas,

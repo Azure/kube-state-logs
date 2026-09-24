@@ -89,23 +89,15 @@ func (h *RoleBindingHandler) createLogEntry(rb *rbacv1.RoleBinding) types.RoleBi
 
 	// Create data structure
 	data := types.RoleBindingData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "rolebinding",
-					Name:             utils.ExtractName(rb),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(rb),
-				},
-				Namespace: utils.ExtractNamespace(rb),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(rb),
-				Annotations: utils.ExtractAnnotations(rb),
-			},
-		},
-		RoleRef:  roleRef,
-		Subjects: subjects,
+		Timestamp:        time.Now(),
+		ResourceType:     "rolebinding",
+		Name:             utils.ExtractName(rb),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(rb),
+		Namespace:        utils.ExtractNamespace(rb),
+		Labels:           utils.ExtractLabels(rb),
+		Annotations:      utils.ExtractAnnotations(rb),
+		RoleRef:          roleRef,
+		Subjects:         subjects,
 	}
 
 	return data

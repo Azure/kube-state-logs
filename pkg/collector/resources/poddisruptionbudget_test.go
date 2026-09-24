@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -26,13 +26,11 @@ func TestPodDisruptionBudgetHandler(t *testing.T) {
 	maxUnavailable := intstrFromInt(1)
 
 	pdb1 := &policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "pdb-1",
-			Namespace:         "default",
-			Labels:            map[string]string{"app": "web"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "pdb-1",
+		Namespace:         "default",
+		Labels:            map[string]string{"app": "web"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable: minAvailable,
 		},
@@ -45,11 +43,9 @@ func TestPodDisruptionBudgetHandler(t *testing.T) {
 	}
 
 	pdb2 := &policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "pdb-2",
-			Namespace:         "kube-system",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "pdb-2",
+		Namespace:         "kube-system",
+		CreationTimestamp: metav1.Now(),
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MaxUnavailable: maxUnavailable,
 		},
@@ -62,11 +58,9 @@ func TestPodDisruptionBudgetHandler(t *testing.T) {
 	}
 
 	pdbEmpty := &policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "empty-pdb",
-			Namespace:         "default",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "empty-pdb",
+		Namespace:         "default",
+		CreationTimestamp: metav1.Now(),
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable: minAvailable,
 		},
@@ -121,11 +115,11 @@ func TestPodDisruptionBudgetHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.namespaces)
+			entries, err := handler.Collect(t.Context(), tt.namespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -141,13 +135,7 @@ func TestPodDisruptionBudgetHandler(t *testing.T) {
 				entryNames[i] = podDisruptionBudgetData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find pod disruption budget with name %s", expectedName)
 				}
@@ -191,11 +179,11 @@ func TestPodDisruptionBudgetHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -214,7 +202,7 @@ func TestPodDisruptionBudgetHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -227,18 +215,16 @@ func TestPodDisruptionBudgetHandler_InvalidObject(t *testing.T) {
 func createTestPodDisruptionBudget(name, namespace string) *policyv1.PodDisruptionBudget {
 	minAvailable := intstrFromInt(2)
 	pdb := &policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test pod disruption budget",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test pod disruption budget",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable: minAvailable,
 		},
@@ -267,10 +253,10 @@ func TestPodDisruptionBudgetHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

@@ -6,7 +6,7 @@ This document provides guidance for AI agents working with the kube-state-logs c
 
 **kube-state-logs** is a Kubernetes cluster state logger that outputs structured JSON logs. It's inspired by [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics) but produces logs instead of Prometheus metrics.
 
-- **Language**: Go 1.26.8+
+- **Language**: Go 1.27.1+
 - **Primary Dependencies**: k8s.io/client-go, k8s.io/api, k8s.io/apimachinery
 - **Deployment**: Helm chart in `charts/kube-state-logs/`
 
@@ -125,15 +125,15 @@ go test -v -run TestDeploymentHandler ./pkg/collector/resources/
 The Dockerfile uses **Azure Linux** with **Microsoft Go** for FIPS (Federal Information Processing Standards) compliance:
 
 - **Source stage**: `mcr.microsoft.com/azurelinux/base/core:3.0`
-- **Go version**: `ARG GO_VERSION=1.26.8`
+- **Go version**: `ARG GO_VERSION=1.27.1`
 - **Runtime stage**: `mcr.microsoft.com/azurelinux/distroless/minimal:3.0`
-- **Crypto experiment**: `GOEXPERIMENT=ms_nocgo_opensslcrypto`
+- **Crypto backend**: Microsoft Go 1.27 enables the OpenSSL backend by default; no `GOEXPERIMENT` override is needed.
 
 ### Updating Go Version
 
 When updating the Go version, the following files must be changed:
 
-1. **`go.mod`** - Update the `go` directive (e.g., `go 1.26.8`)
+1. **`go.mod`** - Update the `go` directive (e.g., `go 1.27.1`)
 2. **`Dockerfile`** - Update `GO_VERSION` and the `GO_SHA256SUM_*` values
 3. **`.github/workflows/ci.yml`** - Update `go-version` in setup-go jobs
 4. **`AGENTS.md`** - Update the documented Go version in Project Overview
@@ -141,13 +141,13 @@ When updating the Go version, the following files must be changed:
 Example version update:
 ```bash
 # go.mod
-go 1.26.8
+go 1.27.1
 
 # Dockerfile
-ARG GO_VERSION=1.26.8
+ARG GO_VERSION=1.27.1
 
 # .github/workflows/ci.yml
-go-version: '1.26.8'
+go-version: '1.27.1'
 ```
 
 ### Updating Kubernetes API Version

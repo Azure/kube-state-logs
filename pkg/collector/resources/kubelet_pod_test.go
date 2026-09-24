@@ -11,7 +11,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -62,10 +61,10 @@ func TestKubeletPodHandlerFiltersLocalAnnotations(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			original := maps.Clone(test.annotations)
 			source := &staticSnapshotSource{snapshot: &kubelet.Snapshot{Pods: []corev1.Pod{{
-				ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Annotations: test.annotations},
+				Name: "pod-a", Annotations: test.annotations,
 			}}}}
 			handler := NewKubeletPodHandler(source, nil, "")
-			entries, err := handler.Collect(context.Background(), nil)
+			entries, err := handler.Collect(t.Context(), nil)
 			if err != nil || len(entries) != 1 {
 				t.Fatalf("Collect() = %v, %v; want one entry", entries, err)
 			}
@@ -92,29 +91,28 @@ func (s *staticSnapshotSource) GetSnapshot(context.Context, bool) (*kubelet.Snap
 func TestKubeletPodHandlerAppliesFiltersAndPromotesNodeLabels(t *testing.T) {
 	source := &staticSnapshotSource{snapshot: &kubelet.Snapshot{Pods: []corev1.Pod{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "included", Namespace: "team-a", Labels: map[string]string{"app": "api"}},
-			Spec:       corev1.PodSpec{NodeName: "node-a"},
+			Name: "included", Namespace: "team-a", Labels: map[string]string{"app": "api"},
+			Spec: corev1.PodSpec{NodeName: "node-a"},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "wrong-label", Namespace: "team-a", Labels: map[string]string{"app": "worker"}},
-			Spec:       corev1.PodSpec{NodeName: "node-a"},
+			Name: "wrong-label", Namespace: "team-a", Labels: map[string]string{"app": "worker"},
+			Spec: corev1.PodSpec{NodeName: "node-a"},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "wrong-namespace", Namespace: "team-b", Labels: map[string]string{"app": "api"}},
-			Spec:       corev1.PodSpec{NodeName: "node-a"},
+			Name: "wrong-namespace", Namespace: "team-b", Labels: map[string]string{"app": "api"},
+			Spec: corev1.PodSpec{NodeName: "node-a"},
 		},
 	}}}
-	client := fake.NewSimpleClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{
+	client := fake.NewSimpleClientset(&corev1.Node{
 		Name: "node-a",
 		Labels: map[string]string{
 			"topology.kubernetes.io/zone": "westus2-1",
 			"ignored":                     "value",
-		},
-	}})
+		}})
 	handler := NewKubeletPodHandler(source, client, "node-a", "topology.kubernetes.io/zone")
 	handler.SetSelectors(labels.SelectorFromSet(map[string]string{"app": "api"}), fields.OneTermEqualSelector("spec.nodeName", "node-a"))
 
-	entries, err := handler.Collect(context.Background(), []string{"team-a"})
+	entries, err := handler.Collect(t.Context(), []string{"team-a"})
 	if err != nil {
 		t.Fatalf("Collect() error: %v", err)
 	}
@@ -134,10 +132,10 @@ func TestKubeletPodHandlerAppliesFiltersAndPromotesNodeLabels(t *testing.T) {
 }
 
 func TestKubeletPodHandlerCancelsNodeLabelLookup(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	source := &staticSnapshotSource{snapshot: &kubelet.Snapshot{Pods: []corev1.Pod{{
-		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default"},
-		Spec:       corev1.PodSpec{NodeName: "node-a"},
+		Name: "pod-a", Namespace: "default",
+		Spec: corev1.PodSpec{NodeName: "node-a"},
 	}}}}
 	client := fake.NewSimpleClientset()
 	lookupStarted := make(chan struct{})

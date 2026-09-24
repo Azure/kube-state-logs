@@ -108,21 +108,13 @@ func (h *EndpointsHandler) createLogEntry(endpoints *corev1.Endpoints) types.End
 
 	// Create data structure
 	data := types.EndpointsData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "endpoints",
-					Name:             utils.ExtractName(endpoints),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(endpoints),
-				},
-				Namespace: utils.ExtractNamespace(endpoints),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(endpoints),
-				Annotations: utils.ExtractAnnotations(endpoints),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "endpoints",
+		Name:             utils.ExtractName(endpoints),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(endpoints),
+		Namespace:        utils.ExtractNamespace(endpoints),
+		Labels:           utils.ExtractLabels(endpoints),
+		Annotations:      utils.ExtractAnnotations(endpoints),
 		Addresses: func() []types.EndpointAddressData {
 			if addresses == nil {
 				return []types.EndpointAddressData{}

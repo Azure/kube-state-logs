@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	storagev1 "k8s.io/api/storage/v1"
@@ -67,9 +68,7 @@ func (h *VolumeAttachmentHandler) createLogEntry(va *storagev1.VolumeAttachment)
 	// Get attachment metadata
 	attachmentMetadata := make(map[string]string)
 	if va.Status.AttachmentMetadata != nil {
-		for key, value := range va.Status.AttachmentMetadata {
-			attachmentMetadata[key] = value
-		}
+		maps.Copy(attachmentMetadata, va.Status.AttachmentMetadata)
 	}
 
 	// Get volume name
@@ -80,22 +79,16 @@ func (h *VolumeAttachmentHandler) createLogEntry(va *storagev1.VolumeAttachment)
 
 	// Create data structure
 	data := types.VolumeAttachmentData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "volumeattachment",
-				Name:             utils.ExtractName(va),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(va),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(va),
-				Annotations: utils.ExtractAnnotations(va),
-			},
-		},
-		Attacher:   va.Spec.Attacher,
-		VolumeName: volumeName,
-		NodeName:   va.Spec.NodeName,
-		Attached:   va.Status.Attached,
+		Timestamp:        time.Now(),
+		ResourceType:     "volumeattachment",
+		Name:             utils.ExtractName(va),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(va),
+		Labels:           utils.ExtractLabels(va),
+		Annotations:      utils.ExtractAnnotations(va),
+		Attacher:         va.Spec.Attacher,
+		VolumeName:       volumeName,
+		NodeName:         va.Spec.NodeName,
+		Attached:         va.Status.Attached,
 	}
 
 	return data

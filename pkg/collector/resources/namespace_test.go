@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -21,12 +21,10 @@ import (
 
 func TestNamespaceHandler(t *testing.T) {
 	namespace1 := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "default",
-			Labels:            map[string]string{"env": "prod"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "default",
+		Labels:            map[string]string{"env": "prod"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Status: corev1.NamespaceStatus{
 			Phase: corev1.NamespaceActive,
 			Conditions: []corev1.NamespaceCondition{
@@ -36,10 +34,8 @@ func TestNamespaceHandler(t *testing.T) {
 	}
 
 	namespace2 := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "kube-system",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "kube-system",
+		CreationTimestamp: metav1.Now(),
 		Status: corev1.NamespaceStatus{
 			Phase: corev1.NamespaceActive,
 			Conditions: []corev1.NamespaceCondition{
@@ -49,12 +45,10 @@ func TestNamespaceHandler(t *testing.T) {
 	}
 
 	namespaceTerminating := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "terminating-ns",
-			DeletionTimestamp: &metav1.Time{Time: time.Now()},
-			CreationTimestamp: metav1.Now(),
-			Finalizers:        []string{"kubernetes"},
-		},
+		Name:              "terminating-ns",
+		DeletionTimestamp: &metav1.Time{Time: time.Now()},
+		CreationTimestamp: metav1.Now(),
+		Finalizers:        []string{"kubernetes"},
 		Status: corev1.NamespaceStatus{
 			Phase: corev1.NamespaceTerminating,
 			Conditions: []corev1.NamespaceCondition{
@@ -69,7 +63,7 @@ func TestNamespaceHandler(t *testing.T) {
 		filterNamespaces []string
 		expectedCount    int
 		expectedNames    []string
-		expectedFields   map[string]interface{}
+		expectedFields   map[string]any
 	}{
 		{
 			name:             "collect all namespaces",
@@ -91,7 +85,7 @@ func TestNamespaceHandler(t *testing.T) {
 			filterNamespaces: []string{},
 			expectedCount:    1,
 			expectedNames:    []string{"terminating-ns"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"phase":                 "Terminating",
 				"condition_terminating": true,
 				"finalizers":            []string{"kubernetes"},
@@ -112,11 +106,11 @@ func TestNamespaceHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.filterNamespaces)
+			entries, err := handler.Collect(t.Context(), tt.filterNamespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -132,13 +126,7 @@ func TestNamespaceHandler(t *testing.T) {
 				entryNames[i] = namespaceData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find namespace with name %s", expectedName)
 				}
@@ -207,11 +195,11 @@ func TestNamespaceHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -230,7 +218,7 @@ func TestNamespaceHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -242,17 +230,15 @@ func TestNamespaceHandler_InvalidObject(t *testing.T) {
 // createTestNamespace creates a test Namespace with various configurations
 func createTestNamespace(name string, phase corev1.NamespacePhase) *corev1.Namespace {
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test namespace",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name: name,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test namespace",
+		},
+		CreationTimestamp: metav1.Now(),
 		Status: corev1.NamespaceStatus{
 			Phase: phase,
 			Conditions: []corev1.NamespaceCondition{
@@ -278,10 +264,10 @@ func TestNamespaceHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -379,10 +365,10 @@ func TestNamespaceHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test namespace filtering
 	entries, err := handler.Collect(ctx, []string{"test-namespace-1", "test-namespace-3"})

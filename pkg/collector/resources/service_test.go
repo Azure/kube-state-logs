@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -23,19 +22,17 @@ import (
 func createTestService(name, namespace string, serviceType corev1.ServiceType) *corev1.Service {
 	now := metav1.Now()
 	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test service",
-			},
-			CreationTimestamp: now,
-			Generation:        1,
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test service",
+		},
+		CreationTimestamp: now,
+		Generation:        1,
 		Spec: corev1.ServiceSpec{
 			Type: serviceType,
 			Ports: []corev1.ServicePort{
@@ -60,19 +57,17 @@ func createTestService(name, namespace string, serviceType corev1.ServiceType) *
 func createTestServiceEndpoints(name, namespace string, serviceType corev1.ServiceType) *corev1.Service {
 	now := metav1.Now()
 	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test service",
-			},
-			CreationTimestamp: now,
-			Generation:        1,
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test service",
+		},
+		CreationTimestamp: now,
+		Generation:        1,
 		Spec: corev1.ServiceSpec{
 			Type: serviceType,
 			Ports: []corev1.ServicePort{
@@ -96,10 +91,8 @@ func createTestServiceEndpoints(name, namespace string, serviceType corev1.Servi
 // createTestEndpointsForService creates test Endpoints for a service
 func createTestEndpointsForService(name, namespace string, addresses int) *corev1.Endpoints {
 	endpoints := &corev1.Endpoints{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Subsets: []corev1.EndpointSubset{
 			{
 				Addresses: make([]corev1.EndpointAddress, addresses),
@@ -161,11 +154,11 @@ func TestServiceHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all services
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -293,9 +286,9 @@ func TestServiceHandler_Collect_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
-	ctx := context.Background()
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -321,10 +314,10 @@ func TestServiceHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test multiple namespace filtering
 	entries, err := handler.Collect(ctx, []string{"default", "monitoring"})
@@ -370,12 +363,12 @@ func TestServiceHandler_countEndpointsForService(t *testing.T) {
 	}
 	// Create endpoints before starting informers
 	endpoints := createTestEndpointsForService("test-service", "default", 3)
-	_, err = client.CoreV1().Endpoints("default").Create(context.Background(), endpoints, metav1.CreateOptions{})
+	_, err = client.CoreV1().Endpoints("default").Create(t.Context(), endpoints, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create endpoints: %v", err)
 	}
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 	// Test with endpoints
 	count := handler.countEndpointsForService("default", "test-service")
 	if count != 3 {

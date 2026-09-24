@@ -26,8 +26,7 @@ func ExtractCPUMillicores(resourceList corev1.ResourceList) *int64 {
 		return nil
 	}
 	if quantity, exists := resourceList[corev1.ResourceCPU]; exists {
-		milliValue := quantity.MilliValue()
-		return &milliValue
+		return new(quantity.MilliValue())
 	}
 	return nil
 }
@@ -38,8 +37,7 @@ func ExtractMemoryBytes(resourceList corev1.ResourceList) *int64 {
 		return nil
 	}
 	if quantity, exists := resourceList[corev1.ResourceMemory]; exists {
-		byteValue := quantity.Value()
-		return &byteValue
+		return new(quantity.Value())
 	}
 	return nil
 }
@@ -50,8 +48,7 @@ func ExtractPodsCount(resourceList corev1.ResourceList) *int64 {
 		return nil
 	}
 	if quantity, exists := resourceList[corev1.ResourcePods]; exists {
-		value := quantity.Value()
-		return &value
+		return new(quantity.Value())
 	}
 	return nil
 }

@@ -107,27 +107,15 @@ func (h *ReplicaSetHandler) createLogEntry(rs *appsv1.ReplicaSet) types.ReplicaS
 	createdByKind, createdByName := utils.GetOwnerReferenceInfo(rs)
 
 	return types.ReplicaSetData{
-		ControllerCreatedResourceMetadata: types.ControllerCreatedResourceMetadata{
-			NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-				NamespacedMetadata: types.NamespacedMetadata{
-					BaseMetadata: types.BaseMetadata{
-						Timestamp:        time.Now(),
-						ResourceType:     "replicaset",
-						Name:             utils.ExtractName(rs),
-						CreatedTimestamp: utils.ExtractCreationTimestamp(rs),
-					},
-					Namespace: utils.ExtractNamespace(rs),
-				},
-				LabeledMetadata: types.LabeledMetadata{
-					Labels:      utils.ExtractLabels(rs),
-					Annotations: utils.ExtractAnnotations(rs),
-				},
-			},
-			ControllerCreatedMetadata: types.ControllerCreatedMetadata{
-				CreatedByKind: createdByKind,
-				CreatedByName: createdByName,
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "replicaset",
+		Name:             utils.ExtractName(rs),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(rs),
+		Namespace:        utils.ExtractNamespace(rs),
+		Labels:           utils.ExtractLabels(rs),
+		Annotations:      utils.ExtractAnnotations(rs),
+		CreatedByKind:    createdByKind,
+		CreatedByName:    createdByName,
 		// Replica counts
 		DesiredReplicas:      desiredReplicas,
 		CurrentReplicas:      rs.Status.Replicas,

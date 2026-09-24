@@ -5,6 +5,7 @@ package resources
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	storagev1 "k8s.io/api/storage/v1"
@@ -91,9 +92,7 @@ func (h *StorageClassHandler) createLogEntry(sc *storagev1.StorageClass) types.S
 	// Get parameters
 	parameters := make(map[string]string)
 	if sc.Parameters != nil {
-		for key, value := range sc.Parameters {
-			parameters[key] = value
-		}
+		maps.Copy(parameters, sc.Parameters)
 	}
 
 	// Get mount options
@@ -117,18 +116,12 @@ func (h *StorageClassHandler) createLogEntry(sc *storagev1.StorageClass) types.S
 
 	// Create data structure
 	data := types.StorageClassData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "storageclass",
-				Name:             utils.ExtractName(sc),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(sc),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(sc),
-				Annotations: annotations,
-			},
-		},
+		Timestamp:            time.Now(),
+		ResourceType:         "storageclass",
+		Name:                 utils.ExtractName(sc),
+		CreatedTimestamp:     utils.ExtractCreationTimestamp(sc),
+		Labels:               utils.ExtractLabels(sc),
+		Annotations:          annotations,
 		Provisioner:          sc.Provisioner,
 		ReclaimPolicy:        reclaimPolicy,
 		VolumeBindingMode:    volumeBindingMode,

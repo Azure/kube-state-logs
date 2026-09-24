@@ -92,23 +92,16 @@ func (h *NamespaceHandler) createLogEntry(ns *corev1.Namespace) types.NamespaceD
 
 	var deletionTimestamp *v1.Time
 	if t := utils.ExtractDeletionTimestamp(ns); t != nil {
-		ts := v1.NewTime(*t)
-		deletionTimestamp = &ts
+		deletionTimestamp = new(v1.NewTime(*t))
 	}
 
 	data := types.NamespaceData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "namespace",
-				Name:             utils.ExtractName(ns),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(ns),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(ns),
-				Annotations: utils.ExtractAnnotations(ns),
-			},
-		},
+		Timestamp:            time.Now(),
+		ResourceType:         "namespace",
+		Name:                 utils.ExtractName(ns),
+		CreatedTimestamp:     utils.ExtractCreationTimestamp(ns),
+		Labels:               utils.ExtractLabels(ns),
+		Annotations:          utils.ExtractAnnotations(ns),
 		Phase:                phase,
 		ConditionActive:      conditionActive,
 		ConditionTerminating: conditionTerminating,

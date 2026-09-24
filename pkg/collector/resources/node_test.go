@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -23,18 +22,16 @@ import (
 func createTestNode(name string, status corev1.ConditionStatus) *corev1.Node {
 	now := metav1.Now()
 	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"kubernetes.io/hostname":         name,
-				"node-role.kubernetes.io/worker": "",
-			},
-			Annotations: map[string]string{
-				"description": "test node",
-			},
-			CreationTimestamp: now,
-			Generation:        1,
+		Name: name,
+		Labels: map[string]string{
+			"kubernetes.io/hostname":         name,
+			"node-role.kubernetes.io/worker": "",
 		},
+		Annotations: map[string]string{
+			"description": "test node",
+		},
+		CreationTimestamp: now,
+		Generation:        1,
 		Spec: corev1.NodeSpec{
 			Unschedulable: false,
 			Taints: []corev1.Taint{
@@ -154,9 +151,9 @@ func TestNodeHandler_Collect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
-	ctx := context.Background()
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -231,9 +228,9 @@ func TestNodeHandler_Collect_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
-	ctx := context.Background()
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

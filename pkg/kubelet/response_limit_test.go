@@ -4,7 +4,6 @@
 package kubelet
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -27,7 +26,7 @@ func TestClientResponseSizeLimit(t *testing.T) {
 			}, "token")
 			for _, endpoint := range []string{"/pods", "/stats/summary"} {
 				var destination any
-				err := client.get(context.Background(), endpoint, &destination)
+				err := client.get(t.Context(), endpoint, &destination)
 				if (err != nil) != test.wantErr {
 					t.Fatalf("%s error = %v, wantErr %v", endpoint, err, test.wantErr)
 				}

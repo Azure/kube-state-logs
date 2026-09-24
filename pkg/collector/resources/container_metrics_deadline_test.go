@@ -35,7 +35,7 @@ func TestContainerHandlerMetricsDeadline(t *testing.T) {
 		{name: "already canceled", alreadyCanceled: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if test.alreadyCanceled {
 				cancel()

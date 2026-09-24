@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -22,20 +21,18 @@ import (
 func createTestPod(name, namespace string, phase corev1.PodPhase) *corev1.Pod {
 	now := metav1.Now()
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			UID:       "test-pod-uid",
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test pod",
-			},
-			CreationTimestamp: now,
-			Generation:        1,
+		Name:      name,
+		Namespace: namespace,
+		UID:       "test-pod-uid",
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test pod",
+		},
+		CreationTimestamp: now,
+		Generation:        1,
 		Spec: corev1.PodSpec{
 			NodeName: "test-node",
 			Containers: []corev1.Container{
@@ -156,11 +153,11 @@ func TestPodHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all pods
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -198,12 +195,10 @@ func TestPodHandler_Collect(t *testing.T) {
 func TestPodHandler_PromotesSelectedNodeLabels(t *testing.T) {
 	pod := createTestPod("test-pod", "default", corev1.PodRunning)
 	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-node",
-			Labels: map[string]string{
-				"topology.kubernetes.io/zone": "westus2-1",
-				"kubernetes.io/arch":          "amd64",
-			},
+		Name: "test-node",
+		Labels: map[string]string{
+			"topology.kubernetes.io/zone": "westus2-1",
+			"kubernetes.io/arch":          "amd64",
 		},
 	}
 	client := fake.NewSimpleClientset(pod, node)
@@ -214,10 +209,10 @@ func TestPodHandler_PromotesSelectedNodeLabels(t *testing.T) {
 	if err := handler.SetupInformer(factory, logger, time.Hour); err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	entries, err := handler.Collect(context.Background(), nil)
+	entries, err := handler.Collect(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -245,10 +240,10 @@ func TestPodHandler_Collect_EmptyCache(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -275,10 +270,10 @@ func TestPodHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test filtering by specific namespace
 	entries, err := handler.Collect(ctx, []string{"default"})

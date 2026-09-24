@@ -110,21 +110,13 @@ func (h *LimitRangeHandler) createLogEntry(lr *corev1.LimitRange) types.LimitRan
 	}
 
 	data := types.LimitRangeData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "limitrange",
-					Name:             utils.ExtractName(lr),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(lr),
-				},
-				Namespace: utils.ExtractNamespace(lr),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(lr),
-				Annotations: utils.ExtractAnnotations(lr),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "limitrange",
+		Name:             utils.ExtractName(lr),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(lr),
+		Namespace:        utils.ExtractNamespace(lr),
+		Labels:           utils.ExtractLabels(lr),
+		Annotations:      utils.ExtractAnnotations(lr),
 		Limits: func() []types.LimitRangeItem {
 			if limits == nil {
 				return []types.LimitRangeItem{}

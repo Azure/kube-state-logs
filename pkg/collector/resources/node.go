@@ -5,7 +5,8 @@ package resources
 
 import (
 	"context"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
-	"k8s.io/utils/pointer"
 
 	"github.com/azure/kube-state-logs/pkg/interfaces"
 	"github.com/azure/kube-state-logs/pkg/types"
@@ -111,7 +111,6 @@ func (h *NodeHandler) createLogEntry(node *corev1.Node) types.NodeData {
 	// Get node conditions in a single loop
 	var ready *bool
 	conditions := make(map[string]*bool)
-	unschedulable := node.Spec.Unschedulable
 
 	for _, condition := range node.Status.Conditions {
 		val := utils.ConvertCoreConditionStatus(condition.Status)
@@ -134,7 +133,7 @@ func (h *NodeHandler) createLogEntry(node *corev1.Node) types.NodeData {
 	// Get node role
 	nodeRole := ""
 	var roles []string
-	for key := range node.Labels {
+	for key := range maps.Keys(node.Labels) {
 		if after, ok := strings.CutPrefix(key, "node-role.kubernetes.io/"); ok {
 			role := after
 			if role != "" {
@@ -142,10 +141,9 @@ func (h *NodeHandler) createLogEntry(node *corev1.Node) types.NodeData {
 			}
 		}
 	}
-	// Sort roles and use the first one for consistency
+	// Use the lexicographically first role for consistency.
 	if len(roles) > 0 {
-		sort.Strings(roles)
-		nodeRole = roles[0]
+		nodeRole = slices.Min(roles)
 	}
 
 	// Get taints
@@ -164,18 +162,12 @@ func (h *NodeHandler) createLogEntry(node *corev1.Node) types.NodeData {
 	cpuUsage, memoryUsage := h.getNodeUsageFromCache(node.Name)
 
 	data := types.NodeData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "node",
-				Name:             utils.ExtractName(node),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(node),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(node),
-				Annotations: utils.ExtractAnnotations(node),
-			},
-		},
+		Timestamp:               time.Now(),
+		ResourceType:            "node",
+		Name:                    utils.ExtractName(node),
+		CreatedTimestamp:        utils.ExtractCreationTimestamp(node),
+		Labels:                  utils.ExtractLabels(node),
+		Annotations:             utils.ExtractAnnotations(node),
 		Architecture:            node.Status.NodeInfo.Architecture,
 		OperatingSystem:         node.Status.NodeInfo.OperatingSystem,
 		KernelVersion:           node.Status.NodeInfo.KernelVersion,
@@ -206,7 +198,7 @@ func (h *NodeHandler) createLogEntry(node *corev1.Node) types.NodeData {
 		InternalIP:        internalIP,
 		ExternalIP:        externalIP,
 		Hostname:          hostname,
-		Unschedulable:     &unschedulable,
+		Unschedulable:     new(node.Spec.Unschedulable),
 		Role:              nodeRole,
 		Taints:            taints,
 		DeletionTimestamp: utils.ExtractDeletionTimestamp(node),
@@ -223,7 +215,7 @@ func (h *NodeHandler) collectAllNodeMetrics(ctx context.Context) {
 
 	// Get metrics for all nodes
 	nodeMetricsList, err := h.metricsClient.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{
-		TimeoutSeconds: pointer.Int64(30),
+		TimeoutSeconds: new(int64(30)),
 	})
 	if err != nil {
 		// Silently fail if metrics server is unavailable
@@ -243,14 +235,12 @@ func (h *NodeHandler) getNodeUsageFromCache(nodeName string) (cpuMillicore *int6
 		if nodeMetrics, ok := obj.(*metricsv1beta1.NodeMetrics); ok {
 			// Extract CPU usage in millicores
 			if cpuQuantity, exists := nodeMetrics.Usage[corev1.ResourceCPU]; exists {
-				cpuMillicoreVal := cpuQuantity.MilliValue()
-				cpuMillicore = &cpuMillicoreVal
+				cpuMillicore = new(cpuQuantity.MilliValue())
 			}
 
 			// Extract memory usage in bytes
 			if memQuantity, exists := nodeMetrics.Usage[corev1.ResourceMemory]; exists {
-				memoryBytesVal := memQuantity.Value()
-				memoryBytes = &memoryBytesVal
+				memoryBytes = new(memQuantity.Value())
 			}
 		}
 	}

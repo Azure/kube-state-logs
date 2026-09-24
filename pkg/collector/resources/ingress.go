@@ -129,27 +129,18 @@ func (h *IngressHandler) createLogEntry(ingress *networkingv1.Ingress) types.Ing
 	// Check if load balancer is ready
 	var conditionLoadBalancerReady *bool
 	if len(ingress.Status.LoadBalancer.Ingress) > 0 {
-		val := true
-		conditionLoadBalancerReady = &val
+		conditionLoadBalancerReady = new(true)
 	}
 
 	// Create data structure
 	data := types.IngressData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "ingress",
-					Name:             utils.ExtractName(ingress),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(ingress),
-				},
-				Namespace: utils.ExtractNamespace(ingress),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(ingress),
-				Annotations: utils.ExtractAnnotations(ingress),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "ingress",
+		Name:             utils.ExtractName(ingress),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(ingress),
+		Namespace:        utils.ExtractNamespace(ingress),
+		Labels:           utils.ExtractLabels(ingress),
+		Annotations:      utils.ExtractAnnotations(ingress),
 		IngressClassName: ingressClassName,
 		LoadBalancerIP:   "",
 		LoadBalancerIngress: func() []types.LoadBalancerIngressData {

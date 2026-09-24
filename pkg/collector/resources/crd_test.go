@@ -6,6 +6,7 @@ package resources
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -29,25 +30,25 @@ func TestCRDHandler(t *testing.T) {
 	}
 
 	crd1 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "example.com/v1",
 			"kind":       "MyResource",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "resource-1",
 				"namespace": "default",
-				"labels": map[string]interface{}{
+				"labels": map[string]any{
 					"app": "web",
 				},
-				"annotations": map[string]interface{}{
+				"annotations": map[string]any{
 					"purpose": "test",
 				},
 				"creationTimestamp": metav1.Now().Format(time.RFC3339),
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"replicas": float64(3),
 				"image":    "nginx:latest",
 			},
-			"status": map[string]interface{}{
+			"status": map[string]any{
 				"ready":     true,
 				"phase":     "Running",
 				"replicas":  float64(3),
@@ -57,19 +58,19 @@ func TestCRDHandler(t *testing.T) {
 	}
 
 	crd2 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "example.com/v1",
 			"kind":       "MyResource",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":              "resource-2",
 				"namespace":         "kube-system",
 				"creationTimestamp": metav1.Now().Format(time.RFC3339),
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"replicas": float64(1),
 				"image":    "busybox:latest",
 			},
-			"status": map[string]interface{}{
+			"status": map[string]any{
 				"ready":     false,
 				"phase":     "Pending",
 				"replicas":  float64(1),
@@ -79,10 +80,10 @@ func TestCRDHandler(t *testing.T) {
 	}
 
 	crdEmpty := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "example.com/v1",
 			"kind":       "MyResource",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":              "empty-resource",
 				"namespace":         "default",
 				"creationTimestamp": metav1.Now().Format(time.RFC3339),
@@ -97,7 +98,7 @@ func TestCRDHandler(t *testing.T) {
 		customFields   []string
 		expectedCount  int
 		expectedNames  []string
-		expectedFields map[string]interface{}
+		expectedFields map[string]any
 	}{
 		{
 			name:          "collect all CRD resources",
@@ -171,13 +172,7 @@ func TestCRDHandler(t *testing.T) {
 				entryNames[i] = crdData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find CRD resource with name %s", expectedName)
 				}
@@ -243,11 +238,11 @@ func TestCRDHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.informer.HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.informer.HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -273,7 +268,7 @@ func TestCRDHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &metav1.Status{} // Use a non-Unstructured object
 	handler.informer.GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -290,22 +285,22 @@ func TestCRDHandler_CustomFields(t *testing.T) {
 	}
 
 	crd := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "example.com/v1",
 			"kind":       "MyResource",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":              "test-resource",
 				"namespace":         "default",
 				"creationTimestamp": metav1.Now().Format(time.RFC3339),
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"replicas": float64(3),
 				"image":    "nginx:latest",
-				"config": map[string]interface{}{
+				"config": map[string]any{
 					"port": float64(8080),
 				},
 			},
-			"status": map[string]interface{}{
+			"status": map[string]any{
 				"ready":     true,
 				"phase":     "Running",
 				"replicas":  float64(3),
@@ -332,11 +327,11 @@ func TestCRDHandler_CustomFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.informer.HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.informer.HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -379,15 +374,15 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 	}
 
 	crd := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "example.com/v1",
 			"kind":       "MyResource",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":              "test-resource",
 				"namespace":         "default",
 				"creationTimestamp": metav1.Now().Format(time.RFC3339),
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"image": "nginx:latest",
 			},
 		},
@@ -407,12 +402,12 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.informer.HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.informer.HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
 
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -435,7 +430,7 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 		t.Fatalf("Failed to marshal CRDData: %v", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(jsonData, &result); err != nil {
 		t.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
