@@ -66,6 +66,23 @@ resources:
 
 # Deployment settings (simple and advanced modes)
 deployment:
+  # Increase replicas only when leader election is enabled to avoid duplicate logs.
+  # Multiple replicas require one eligible node per replica because the chart
+  # applies required pod anti-affinity by kubernetes.io/hostname.
+  replicas: 1
+  leaderElection:
+    enabled: false
+    # Empty uses the Deployment name.
+    leaseName: ""
+    leaseDuration: "15s"
+    renewDeadline: "10s"
+    retryPeriod: "2s"
+  podDisruptionBudget:
+    enabled: false
+    # Configure exactly one of minAvailable or maxUnavailable. Values may be
+    # absolute numbers or percentages. The default protects a single replica.
+    minAvailable: 1
+    maxUnavailable: null
   # Override the OS selector only with an image supporting that operating system.
   nodeSelector:
     kubernetes.io/os: linux

@@ -39,8 +39,23 @@ func main() {
 		kubeletPort          = flag.Int("kubelet-port", 10250, "Port for the kubelet API")
 		nodeIP               = flag.String("node-ip", "", "IP address of the node for kubelet API access (required when --use-kubelet-api is set)")
 		kubeletInsecureTLS   = flag.Bool("kubelet-insecure-skip-verify", false, "Disable kubelet TLS certificate verification (use only on trusted cluster networks)")
+		leaderElect          = flag.Bool("leader-elect", false, "Enable leader election so only one replica collects and logs resource state")
+		leaderElectionName   = flag.String("leader-election-lease-name", "kube-state-logs", "Name of the Lease used for leader election")
+		leaderElectionNS     = flag.String("leader-election-lease-namespace", os.Getenv("POD_NAMESPACE"), "Namespace of the Lease used for leader election")
+		leaderLeaseDuration  = flag.Duration("leader-election-lease-duration", config.DefaultLeaderElectionLeaseDuration, "Duration that non-leaders wait before attempting to acquire leadership")
+		leaderRenewDeadline  = flag.Duration("leader-election-renew-deadline", config.DefaultLeaderElectionRenewDeadline, "Duration that the leader retries renewing its leadership")
+		leaderRetryPeriod    = flag.Duration("leader-election-retry-period", config.DefaultLeaderElectionRetryPeriod, "Duration between leader election acquisition and renewal attempts")
 	)
 	flag.Parse()
+
+	leaderElectionIdentity := ""
+	if *leaderElect {
+		var err error
+		leaderElectionIdentity, err = os.Hostname()
+		if err != nil {
+			klog.Fatalf("Failed to determine leader election identity: %v", err)
+		}
+	}
 
 	// Set log level
 	if err := config.SetLogLevel(*logLevel); err != nil {
@@ -68,20 +83,27 @@ func main() {
 
 	// Create configuration
 	cfg := &config.Config{
-		LogInterval:               *logInterval,
-		Resources:                 config.ParseResourceList(*resources),
-		ResourceConfigs:           resourceConfigsList,
-		CRDs:                      config.ParseCRDConfigs(*crdConfigs),
-		Namespaces:                config.ParseNamespaceList(*namespaces),
-		Kubeconfig:                *kubeconfig,
-		ContainerEnvVars:          config.ParseContainerEnvVars(*containerEnvVars),
-		ConfigMapIncludeValues:    *configMapValues,
-		Node:                      *node,
-		TrackUnscheduledPods:      *trackUnscheduledPods,
-		UseKubeletAPI:             *useKubeletAPI,
-		KubeletPort:               *kubeletPort,
-		NodeIP:                    *nodeIP,
-		KubeletInsecureSkipVerify: *kubeletInsecureTLS,
+		LogInterval:                  *logInterval,
+		Resources:                    config.ParseResourceList(*resources),
+		ResourceConfigs:              resourceConfigsList,
+		CRDs:                         config.ParseCRDConfigs(*crdConfigs),
+		Namespaces:                   config.ParseNamespaceList(*namespaces),
+		Kubeconfig:                   *kubeconfig,
+		ContainerEnvVars:             config.ParseContainerEnvVars(*containerEnvVars),
+		ConfigMapIncludeValues:       *configMapValues,
+		Node:                         *node,
+		TrackUnscheduledPods:         *trackUnscheduledPods,
+		UseKubeletAPI:                *useKubeletAPI,
+		KubeletPort:                  *kubeletPort,
+		NodeIP:                       *nodeIP,
+		KubeletInsecureSkipVerify:    *kubeletInsecureTLS,
+		LeaderElection:               *leaderElect,
+		LeaderElectionLeaseName:      *leaderElectionName,
+		LeaderElectionLeaseNamespace: *leaderElectionNS,
+		LeaderElectionIdentity:       leaderElectionIdentity,
+		LeaderElectionLeaseDuration:  *leaderLeaseDuration,
+		LeaderElectionRenewDeadline:  *leaderRenewDeadline,
+		LeaderElectionRetryPeriod:    *leaderRetryPeriod,
 	}
 
 	// Validate configuration to prevent runtime issues

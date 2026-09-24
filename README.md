@@ -57,6 +57,34 @@ deploymentMode: advanced
 
 **Separate RBAC:** Each component gets its own ServiceAccount and ClusterRole with minimal required permissions.
 
+### Multiple Deployment Replicas
+
+Enable leader election before increasing the Deployment replica count. All
+replicas participate using a namespaced Kubernetes Lease, but only the leader
+starts informers and writes logs. Followers remain live and ready while waiting
+to acquire leadership; the leader becomes ready after its informer caches sync.
+
+```yaml
+deployment:
+  replicas: 3
+  leaderElection:
+    enabled: true
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+```
+
+This applies to the Deployment in both simple and advanced modes. It does not
+affect the advanced-mode DaemonSet, whose pods intentionally collect per-node
+data independently. Lease timing and an optional custom lease name can be set
+under `deployment.leaderElection`. When multiple replicas are configured, the
+chart adds required pod anti-affinity using `kubernetes.io/hostname`, so each
+replica runs on a different eligible node. Replicas remain pending if the
+cluster does not have enough eligible nodes. An optional PodDisruptionBudget can
+protect the Deployment during voluntary disruptions. Configure exactly one of
+`minAvailable` or `maxUnavailable`; each accepts an absolute number or a
+percentage.
+
 By default, node collectors use kubelet polling to avoid pod watches and source
 container usage directly from each node. To use node-filtered Kubernetes
 informers and metrics-server instead, set `daemonset.useKubeletAPI: false`.
@@ -185,6 +213,8 @@ until all enabled built-in informer caches have completed their initial
 synchronization, including node-filtered/unscheduled pod caches and dependency
 caches. It returns `200 OK` once collection loops start, and becomes unready on
 shutdown. Built-in informer setup or cache-sync failures prevent readiness.
+When leader election is enabled, followers return `200 OK` while actively
+participating in the election; only the leader waits for informer cache sync.
 
 Both the Deployment and DaemonSet use this endpoint as a readiness probe.
 Unknown built-in resource names are fatal configuration errors. Built-in

@@ -23,6 +23,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 
@@ -35,7 +37,7 @@ import (
 // Collector handles the collection and logging of Kubernetes resource state
 type Collector struct {
 	config          *config.Config
-	client          *kubernetes.Clientset
+	client          kubernetes.Interface
 	dynClient       dynamic.Interface
 	metricsClient   metricsclientset.Interface
 	logger          interfaces.Logger
@@ -50,10 +52,15 @@ type Collector struct {
 	stopCh          chan struct{}
 	wg              sync.WaitGroup
 	ready           atomic.Bool
+	electionRunning atomic.Bool
+	leading         atomic.Bool
 }
 
 // Ready reports whether all enabled built-in caches have synced and collection is running.
 func (c *Collector) Ready() bool {
+	if c.config != nil && c.config.LeaderElection && c.electionRunning.Load() && !c.leading.Load() {
+		return true
+	}
 	return c.ready.Load()
 }
 
@@ -340,7 +347,88 @@ func (c *Collector) registerCRDHandlers() {
 }
 
 // Run starts the informers and collection loop
-func (c *Collector) Run(ctx context.Context) (runErr error) {
+func (c *Collector) Run(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	if !c.config.LeaderElection {
+		return c.run(ctx)
+	}
+
+	lock, err := resourcelock.New(
+		resourcelock.LeasesResourceLock,
+		c.config.LeaderElectionLeaseNamespace,
+		c.config.LeaderElectionLeaseName,
+		c.client.CoreV1(),
+		c.client.CoordinationV1(),
+		resourcelock.ResourceLockConfig{Identity: c.config.LeaderElectionIdentity},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create leader election lock: %w", err)
+	}
+
+	electionCtx, cancelElection := context.WithCancelCause(ctx)
+	defer cancelElection(nil)
+
+	runResult := make(chan error, 1)
+	var startedLeading atomic.Bool
+	elector, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
+		Lock:          lock,
+		LeaseDuration: c.config.LeaderElectionLeaseDuration,
+		RenewDeadline: c.config.LeaderElectionRenewDeadline,
+		RetryPeriod:   c.config.LeaderElectionRetryPeriod,
+		Name:          c.config.LeaderElectionLeaseName,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(leaderCtx context.Context) {
+				startedLeading.Store(true)
+				c.leading.Store(true)
+				klog.Infof("Acquired leader lease %s/%s", c.config.LeaderElectionLeaseNamespace, c.config.LeaderElectionLeaseName)
+				runErr := c.run(leaderCtx)
+				runResult <- runErr
+				if runErr != nil {
+					c.electionRunning.Store(false)
+					cancelElection(runErr)
+				}
+				c.leading.Store(false)
+			},
+			OnStoppedLeading: func() {
+				if ctx.Err() == nil {
+					klog.Warning("Leader election stopped")
+				}
+			},
+			OnNewLeader: func(identity string) {
+				if identity != c.config.LeaderElectionIdentity {
+					klog.Infof("Leader is now %s", identity)
+				}
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("invalid leader election configuration: %w", err)
+	}
+
+	klog.Infof("Starting leader election with identity %s", c.config.LeaderElectionIdentity)
+	c.electionRunning.Store(true)
+	defer c.electionRunning.Store(false)
+	elector.Run(electionCtx)
+
+	var runErr error
+	if startedLeading.Load() {
+		runErr = <-runResult
+	}
+	if ctx.Err() != nil {
+		return nil
+	}
+	if runErr != nil {
+		return runErr
+	}
+	if cause := context.Cause(electionCtx); cause != nil && cause != context.Canceled {
+		return cause
+	}
+	return fmt.Errorf("leader election lost")
+}
+
+func (c *Collector) run(ctx context.Context) (runErr error) {
 	parentCtx := ctx
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer func() {

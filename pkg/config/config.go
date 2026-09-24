@@ -19,6 +19,12 @@ const DefaultResourceList = "pod,container,service,node,deployment,job,cronjob,c
 // AllResourceList also enables configured custom-resource handlers.
 const AllResourceList = DefaultResourceList + ",crd"
 
+const (
+	DefaultLeaderElectionLeaseDuration = 15 * time.Second
+	DefaultLeaderElectionRenewDeadline = 10 * time.Second
+	DefaultLeaderElectionRetryPeriod   = 2 * time.Second
+)
+
 // ResourceConfig holds configuration for a specific resource type
 type ResourceConfig struct {
 	Name                string
@@ -68,6 +74,18 @@ type Config struct {
 	// This may be required for self-signed serving certificates and should be
 	// enabled only in trusted cluster networks.
 	KubeletInsecureSkipVerify bool
+	// LeaderElection enables Lease-based leader election so only one replica
+	// runs collection loops.
+	LeaderElection bool
+	// LeaderElectionLeaseName and LeaderElectionLeaseNamespace identify the Lease.
+	LeaderElectionLeaseName      string
+	LeaderElectionLeaseNamespace string
+	// LeaderElectionIdentity uniquely identifies this replica.
+	LeaderElectionIdentity string
+	// Leader election timing controls.
+	LeaderElectionLeaseDuration time.Duration
+	LeaderElectionRenewDeadline time.Duration
+	LeaderElectionRetryPeriod   time.Duration
 }
 
 // ParseResourceList parses a comma-separated string into a slice of resource types
@@ -394,6 +412,27 @@ func (c *Config) Validate() error {
 		if c.KubeletPort <= 0 || c.KubeletPort > 65535 {
 			klog.Warningf("Invalid kubelet port %d, setting to default 10250", c.KubeletPort)
 			c.KubeletPort = 10250
+		}
+	}
+
+	if c.LeaderElection {
+		if c.LeaderElectionLeaseName == "" {
+			return fmt.Errorf("--leader-election-lease-name is required when --leader-elect is enabled")
+		}
+		if c.LeaderElectionLeaseNamespace == "" {
+			return fmt.Errorf("--leader-election-lease-namespace is required when --leader-elect is enabled")
+		}
+		if c.LeaderElectionIdentity == "" {
+			return fmt.Errorf("leader election identity cannot be empty")
+		}
+		if c.LeaderElectionLeaseDuration <= c.LeaderElectionRenewDeadline {
+			return fmt.Errorf("leader election lease duration must be greater than renew deadline")
+		}
+		if c.LeaderElectionRenewDeadline <= c.LeaderElectionRetryPeriod*6/5 {
+			return fmt.Errorf("leader election renew deadline must be greater than retry period multiplied by 1.2")
+		}
+		if c.LeaderElectionRetryPeriod <= 0 {
+			return fmt.Errorf("leader election retry period must be greater than zero")
 		}
 	}
 

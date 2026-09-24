@@ -517,3 +517,53 @@ func TestConfig_NodeFilteringFields(t *testing.T) {
 		})
 	}
 }
+
+func TestConfig_LeaderElection(t *testing.T) {
+	valid := Config{
+		LogInterval:                  time.Minute,
+		LeaderElection:               true,
+		LeaderElectionLeaseName:      "kube-state-logs",
+		LeaderElectionLeaseNamespace: "monitoring",
+		LeaderElectionIdentity:       "pod-1",
+		LeaderElectionLeaseDuration:  DefaultLeaderElectionLeaseDuration,
+		LeaderElectionRenewDeadline:  DefaultLeaderElectionRenewDeadline,
+		LeaderElectionRetryPeriod:    DefaultLeaderElectionRetryPeriod,
+	}
+
+	tests := []struct {
+		name    string
+		mutate  func(*Config)
+		wantErr bool
+	}{
+		{name: "valid"},
+		{name: "disabled ignores settings", mutate: func(cfg *Config) {
+			cfg.LeaderElection = false
+			cfg.LeaderElectionLeaseName = ""
+		}},
+		{name: "missing lease name", mutate: func(cfg *Config) { cfg.LeaderElectionLeaseName = "" }, wantErr: true},
+		{name: "missing lease namespace", mutate: func(cfg *Config) { cfg.LeaderElectionLeaseNamespace = "" }, wantErr: true},
+		{name: "missing identity", mutate: func(cfg *Config) { cfg.LeaderElectionIdentity = "" }, wantErr: true},
+		{name: "lease not greater than renew deadline", mutate: func(cfg *Config) {
+			cfg.LeaderElectionLeaseDuration = cfg.LeaderElectionRenewDeadline
+		}, wantErr: true},
+		{name: "renew deadline too close to retry period", mutate: func(cfg *Config) {
+			cfg.LeaderElectionRenewDeadline = 2 * time.Second
+			cfg.LeaderElectionRetryPeriod = 2 * time.Second
+		}, wantErr: true},
+		{name: "retry period is zero", mutate: func(cfg *Config) {
+			cfg.LeaderElectionRetryPeriod = 0
+		}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := valid
+			if tt.mutate != nil {
+				tt.mutate(&cfg)
+			}
+			if err := cfg.Validate(); (err != nil) != tt.wantErr {
+				t.Fatalf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

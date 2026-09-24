@@ -29,6 +29,34 @@ import (
 
 var readinessTestGVR = schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
 
+func TestReadyWithLeaderElection(t *testing.T) {
+	c := &Collector{config: &config.Config{LeaderElection: true}}
+	if c.Ready() {
+		t.Fatal("collector is ready before leader election starts")
+	}
+
+	c.electionRunning.Store(true)
+	if !c.Ready() {
+		t.Fatal("follower is not ready while participating in leader election")
+	}
+
+	c.leading.Store(true)
+	if c.Ready() {
+		t.Fatal("leader is ready before informer caches sync")
+	}
+
+	c.ready.Store(true)
+	if !c.Ready() {
+		t.Fatal("leader is not ready after informer caches sync")
+	}
+
+	c.electionRunning.Store(false)
+	c.ready.Store(false)
+	if c.Ready() {
+		t.Fatal("collector is ready after leader election stops")
+	}
+}
+
 func newReadinessTestCollector(t *testing.T) (*Collector, *fake.Clientset, *fake.Clientset, *dynamicfake.FakeDynamicClient) {
 	t.Helper()
 	client := fake.NewSimpleClientset()

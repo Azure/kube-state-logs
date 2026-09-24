@@ -1,3 +1,6 @@
+{{- if and (gt (int .Values.deployment.replicas) 1) (not .Values.deployment.leaderElection.enabled) }}
+{{- fail "deployment.leaderElection.enabled must be true when deployment.replicas is greater than 1" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -12,7 +15,7 @@ metadata:
     app.kubernetes.io/component: cluster
     {{- end }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.deployment.replicas }}
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -44,6 +47,18 @@ spec:
         adx-mon/log-destination: "{{ .Values.config.adxMonLogDestination }}:KubeStateLogs"
       {{- end }}
     spec:
+      {{- if gt (int .Values.deployment.replicas) 1 }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "kube-state-logs.selectorLabels" . | nindent 18 }}
+                  {{- if eq .Values.deploymentMode "advanced" }}
+                  app.kubernetes.io/component: cluster
+                  {{- end }}
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
       {{- if .Values.image.pullSecrets.name }}
       imagePullSecrets:
       - name: "{{ .Values.image.pullSecrets.name }}"
@@ -125,6 +140,14 @@ spec:
             {{- if .Values.config.configmapIncludeValues }}
             - --configmap-include-values={{ .Values.config.configmapIncludeValues }}
             {{- end }}
+            {{- if .Values.deployment.leaderElection.enabled }}
+            - --leader-elect
+            - --leader-election-lease-name={{ default (ternary (printf "%s-cluster" (include "kube-state-logs.fullname" .)) (include "kube-state-logs.fullname" .) (eq .Values.deploymentMode "advanced")) .Values.deployment.leaderElection.leaseName }}
+            - --leader-election-lease-namespace=$(POD_NAMESPACE)
+            - --leader-election-lease-duration={{ .Values.deployment.leaderElection.leaseDuration }}
+            - --leader-election-renew-deadline={{ .Values.deployment.leaderElection.renewDeadline }}
+            - --leader-election-retry-period={{ .Values.deployment.leaderElection.retryPeriod }}
+            {{- end }}
           resources:
             limits:
               cpu: {{ .Values.resources.limits.cpu }}
@@ -132,9 +155,17 @@ spec:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}
               memory: {{ .Values.resources.requests.memory }}
-          {{- if .Values.env }}
+          {{- if or .Values.deployment.leaderElection.enabled .Values.env }}
           env:
-            {{- toYaml .Values.env | nindent 12 }}
+            {{- if .Values.deployment.leaderElection.enabled }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
       {{- with .Values.deployment.nodeSelector }}
       nodeSelector:

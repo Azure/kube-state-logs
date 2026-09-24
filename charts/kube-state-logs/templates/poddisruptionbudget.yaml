@@ -1,0 +1,35 @@
+{{- if .Values.deployment.podDisruptionBudget.enabled }}
+{{- $minAvailable := .Values.deployment.podDisruptionBudget.minAvailable }}
+{{- $maxUnavailable := .Values.deployment.podDisruptionBudget.maxUnavailable }}
+{{- if and (ne $minAvailable nil) (ne $maxUnavailable nil) }}
+{{- fail "deployment.podDisruptionBudget must configure only one of minAvailable or maxUnavailable" }}
+{{- end }}
+{{- if and (eq $minAvailable nil) (eq $maxUnavailable nil) }}
+{{- fail "deployment.podDisruptionBudget must configure one of minAvailable or maxUnavailable" }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  {{- if eq .Values.deploymentMode "advanced" }}
+  name: {{ include "kube-state-logs.fullname" . }}-cluster
+  {{- else }}
+  name: {{ include "kube-state-logs.fullname" . }}
+  {{- end }}
+  labels:
+    {{- include "kube-state-logs.labels" . | nindent 4 }}
+    {{- if eq .Values.deploymentMode "advanced" }}
+    app.kubernetes.io/component: cluster
+    {{- end }}
+spec:
+  {{- if ne $minAvailable nil }}
+  minAvailable: {{ $minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ $maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "kube-state-logs.selectorLabels" . | nindent 6 }}
+      {{- if eq .Values.deploymentMode "advanced" }}
+      app.kubernetes.io/component: cluster
+      {{- end }}
+{{- end }}

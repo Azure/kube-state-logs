@@ -1,0 +1,31 @@
+{{- if .Values.deployment.leaderElection.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kube-state-logs.fullname" . }}-leader-election
+  labels:
+    {{- include "kube-state-logs.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kube-state-logs.fullname" . }}-leader-election
+  labels:
+    {{- include "kube-state-logs.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "kube-state-logs.fullname" . }}-leader-election
+subjects:
+  - kind: ServiceAccount
+    {{- if eq .Values.deploymentMode "advanced" }}
+    name: {{ include "kube-state-logs.fullname" . }}-cluster
+    {{- else }}
+    name: {{ include "kube-state-logs.fullname" . }}
+    {{- end }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
