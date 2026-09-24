@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -28,12 +28,10 @@ func TestStorageClassHandler(t *testing.T) {
 	allowExpansion := true
 
 	sc1 := &storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "fast-ssd",
-			Labels:            map[string]string{"type": "ssd"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:                 "fast-ssd",
+		Labels:               map[string]string{"type": "ssd"},
+		Annotations:          map[string]string{"purpose": "test"},
+		CreationTimestamp:    metav1.Now(),
 		Provisioner:          "kubernetes.io/aws-ebs",
 		ReclaimPolicy:        &reclaimPolicyDelete,
 		VolumeBindingMode:    &bindingModeImmediate,
@@ -46,10 +44,8 @@ func TestStorageClassHandler(t *testing.T) {
 	}
 
 	sc2 := &storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "slow-hdd",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:                 "slow-hdd",
+		CreationTimestamp:    metav1.Now(),
 		Provisioner:          "kubernetes.io/azure-disk",
 		ReclaimPolicy:        &reclaimPolicyRetain,
 		VolumeBindingMode:    &bindingModeWaitForFirstConsumer,
@@ -60,13 +56,11 @@ func TestStorageClassHandler(t *testing.T) {
 	}
 
 	scDefault := &storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "default-sc",
-			Annotations: map[string]string{
-				"storageclass.kubernetes.io/is-default-class": "true",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name: "default-sc",
+		Annotations: map[string]string{
+			"storageclass.kubernetes.io/is-default-class": "true",
 		},
+		CreationTimestamp:    metav1.Now(),
 		Provisioner:          "kubernetes.io/aws-ebs",
 		ReclaimPolicy:        &reclaimPolicyDelete,
 		VolumeBindingMode:    &bindingModeImmediate,
@@ -74,10 +68,8 @@ func TestStorageClassHandler(t *testing.T) {
 	}
 
 	scWithTopologies := &storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "topology-sc",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "topology-sc",
+		CreationTimestamp: metav1.Now(),
 		Provisioner:       "kubernetes.io/aws-ebs",
 		ReclaimPolicy:     &reclaimPolicyDelete,
 		VolumeBindingMode: &bindingModeImmediate,
@@ -98,7 +90,7 @@ func TestStorageClassHandler(t *testing.T) {
 		storageClasses []*storagev1.StorageClass
 		expectedCount  int
 		expectedNames  []string
-		expectedFields map[string]interface{}
+		expectedFields map[string]any
 	}{
 		{
 			name:           "collect all storage classes",
@@ -111,7 +103,7 @@ func TestStorageClassHandler(t *testing.T) {
 			storageClasses: []*storagev1.StorageClass{sc1},
 			expectedCount:  1,
 			expectedNames:  []string{"fast-ssd"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"provisioner":            "kubernetes.io/aws-ebs",
 				"reclaim_policy":         "Delete",
 				"volume_binding_mode":    "Immediate",
@@ -123,7 +115,7 @@ func TestStorageClassHandler(t *testing.T) {
 			storageClasses: []*storagev1.StorageClass{scDefault},
 			expectedCount:  1,
 			expectedNames:  []string{"default-sc"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"is_default_class": true,
 			},
 		},
@@ -148,11 +140,11 @@ func TestStorageClassHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), []string{})
+			entries, err := handler.Collect(t.Context(), []string{})
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -168,13 +160,7 @@ func TestStorageClassHandler(t *testing.T) {
 				entryNames[i] = storageClassData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find storage class with name %s", expectedName)
 				}
@@ -221,11 +207,11 @@ func TestStorageClassHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -242,11 +228,11 @@ func TestStorageClassHandler_InvalidObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -257,11 +243,9 @@ func TestStorageClassHandler_InvalidObject(t *testing.T) {
 
 func createTestStorageClass(name string) *storagev1.StorageClass {
 	return &storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              name,
-			CreationTimestamp: metav1.Now(),
-		},
-		Provisioner: "kubernetes.io/aws-ebs",
+		Name:              name,
+		CreationTimestamp: metav1.Now(),
+		Provisioner:       "kubernetes.io/aws-ebs",
 	}
 }
 
@@ -283,11 +267,11 @@ func TestStorageClassHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all storage classes
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

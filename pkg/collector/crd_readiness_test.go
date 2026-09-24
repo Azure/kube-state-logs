@@ -87,7 +87,7 @@ func TestRunCRDsDoNotBlockReadinessOrCollection(t *testing.T) {
 					c.config.Resources = append(c.config.Resources, "namespace")
 					c.handlers["namespace"] = resources.NewNamespaceHandler(client)
 					if _, err := client.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{
-						ObjectMeta: metav1.ObjectMeta{Name: "default"},
+						Name: "default",
 					}, metav1.CreateOptions{}); err != nil {
 						t.Fatal(err)
 					}

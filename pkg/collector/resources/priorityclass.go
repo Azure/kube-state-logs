@@ -72,18 +72,12 @@ func (h *PriorityClassHandler) createLogEntry(pc *schedulingv1.PriorityClass) ty
 	}
 
 	data := types.PriorityClassData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "priorityclass",
-				Name:             utils.ExtractName(pc),
-				CreatedTimestamp: createdTimestamp,
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(pc),
-				Annotations: utils.ExtractAnnotations(pc),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "priorityclass",
+		Name:             utils.ExtractName(pc),
+		CreatedTimestamp: createdTimestamp,
+		Labels:           utils.ExtractLabels(pc),
+		Annotations:      utils.ExtractAnnotations(pc),
 		Value:            pc.Value,
 		GlobalDefault:    pc.GlobalDefault,
 		Description:      pc.Description,

@@ -115,21 +115,13 @@ func (h *PersistentVolumeClaimHandler) createLogEntry(pvc *corev1.PersistentVolu
 	}
 
 	data := types.PersistentVolumeClaimData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "persistentvolumeclaim",
-					Name:             utils.ExtractName(pvc),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(pvc),
-				},
-				Namespace: utils.ExtractNamespace(pvc),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(pvc),
-				Annotations: utils.ExtractAnnotations(pvc),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "persistentvolumeclaim",
+		Name:             utils.ExtractName(pvc),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(pvc),
+		Namespace:        utils.ExtractNamespace(pvc),
+		Labels:           utils.ExtractLabels(pvc),
+		Annotations:      utils.ExtractAnnotations(pvc),
 		AccessModes:      accessModes,
 		StorageClassName: storageClassName,
 		VolumeName:       pvc.Spec.VolumeName,

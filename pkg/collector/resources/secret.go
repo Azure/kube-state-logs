@@ -5,7 +5,8 @@ package resources
 
 import (
 	"context"
-	"sort"
+	"maps"
+	"slices"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -69,34 +70,20 @@ func (h *SecretHandler) Collect(ctx context.Context, namespaces []string) ([]any
 
 // createLogEntry creates a SecretData from a secret
 func (h *SecretHandler) createLogEntry(secret *corev1.Secret) types.SecretData {
-	var dataKeys []string
-	for key := range secret.Data {
-		dataKeys = append(dataKeys, key)
-	}
-	for key := range secret.StringData {
-		dataKeys = append(dataKeys, key)
-	}
-
-	sort.Strings(dataKeys)
+	dataKeys := slices.Collect(maps.Keys(secret.Data))
+	dataKeys = slices.AppendSeq(dataKeys, maps.Keys(secret.StringData))
+	slices.Sort(dataKeys)
 
 	data := types.SecretData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "secret",
-					Name:             utils.ExtractName(secret),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(secret),
-				},
-				Namespace: utils.ExtractNamespace(secret),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(secret),
-				Annotations: utils.ExtractAnnotations(secret),
-			},
-		},
-		Type:     string(secret.Type),
-		DataKeys: dataKeys,
+		Timestamp:        time.Now(),
+		ResourceType:     "secret",
+		Name:             utils.ExtractName(secret),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(secret),
+		Namespace:        utils.ExtractNamespace(secret),
+		Labels:           utils.ExtractLabels(secret),
+		Annotations:      utils.ExtractAnnotations(secret),
+		Type:             string(secret.Type),
+		DataKeys:         dataKeys,
 	}
 
 	return data

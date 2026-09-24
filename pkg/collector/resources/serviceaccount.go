@@ -90,21 +90,13 @@ func (h *ServiceAccountHandler) createLogEntry(sa *corev1.ServiceAccount) types.
 
 	// Create data structure
 	data := types.ServiceAccountData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "serviceaccount",
-					Name:             utils.ExtractName(sa),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(sa),
-				},
-				Namespace: utils.ExtractNamespace(sa),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(sa),
-				Annotations: utils.ExtractAnnotations(sa),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "serviceaccount",
+		Name:             utils.ExtractName(sa),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(sa),
+		Namespace:        utils.ExtractNamespace(sa),
+		Labels:           utils.ExtractLabels(sa),
+		Annotations:      utils.ExtractAnnotations(sa),
 		Secrets: func() []string {
 			if secrets == nil {
 				return []string{}

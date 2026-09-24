@@ -106,24 +106,16 @@ func (h *NetworkPolicyHandler) createLogEntry(np *networkingv1.NetworkPolicy) ty
 
 	// Create data structure
 	data := types.NetworkPolicyData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "networkpolicy",
-					Name:             utils.ExtractName(np),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(np),
-				},
-				Namespace: utils.ExtractNamespace(np),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(np),
-				Annotations: utils.ExtractAnnotations(np),
-			},
-		},
-		PolicyTypes:  policyTypes,
-		IngressRules: ingressRules,
-		EgressRules:  egressRules,
+		Timestamp:        time.Now(),
+		ResourceType:     "networkpolicy",
+		Name:             utils.ExtractName(np),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(np),
+		Namespace:        utils.ExtractNamespace(np),
+		Labels:           utils.ExtractLabels(np),
+		Annotations:      utils.ExtractAnnotations(np),
+		PolicyTypes:      policyTypes,
+		IngressRules:     ingressRules,
+		EgressRules:      egressRules,
 	}
 
 	return data

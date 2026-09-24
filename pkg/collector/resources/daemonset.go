@@ -92,21 +92,13 @@ func (h *DaemonSetHandler) createLogEntry(ds *appsv1.DaemonSet) types.DaemonSetD
 	}
 
 	return types.DaemonSetData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "daemonset",
-					Name:             utils.ExtractName(ds),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(ds),
-				},
-				Namespace: utils.ExtractNamespace(ds),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(ds),
-				Annotations: utils.ExtractAnnotations(ds),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "daemonset",
+		Name:             utils.ExtractName(ds),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(ds),
+		Namespace:        utils.ExtractNamespace(ds),
+		Labels:           utils.ExtractLabels(ds),
+		Annotations:      utils.ExtractAnnotations(ds),
 		// Replica counts
 		DesiredNumberScheduled: ds.Status.DesiredNumberScheduled,
 		CurrentNumberScheduled: ds.Status.CurrentNumberScheduled,

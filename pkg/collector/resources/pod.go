@@ -207,8 +207,7 @@ func CreatePodLogEntry(pod *corev1.Pod, nodeLabels map[string]string) types.PodD
 	var unschedulable *bool
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
-			val := true
-			unschedulable = &val
+			unschedulable = new(true)
 			break
 		}
 	}
@@ -301,35 +300,22 @@ func CreatePodLogEntry(pod *corev1.Pod, nodeLabels map[string]string) types.PodD
 		}
 		// If no container termination time found, use current time as fallback
 		if completionTime == nil {
-			now := time.Now()
-			completionTime = &now
+			completionTime = new(time.Now())
 		}
 	}
 
 	containerMetrics := aggregateContainerResources(pod)
 
 	data := types.PodData{
-		ControllerCreatedResourceMetadata: types.ControllerCreatedResourceMetadata{
-			NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-				NamespacedMetadata: types.NamespacedMetadata{
-					BaseMetadata: types.BaseMetadata{
-						Timestamp:        time.Now(),
-						ResourceType:     "pod",
-						Name:             utils.ExtractName(pod),
-						CreatedTimestamp: utils.ExtractCreationTimestamp(pod),
-					},
-					Namespace: utils.ExtractNamespace(pod),
-				},
-				LabeledMetadata: types.LabeledMetadata{
-					Labels:      utils.ExtractLabels(pod),
-					Annotations: utils.ExtractAnnotations(pod),
-				},
-			},
-			ControllerCreatedMetadata: types.ControllerCreatedMetadata{
-				CreatedByKind: createdByKind,
-				CreatedByName: createdByName,
-			},
-		},
+		Timestamp:                 time.Now(),
+		ResourceType:              "pod",
+		Name:                      utils.ExtractName(pod),
+		CreatedTimestamp:          utils.ExtractCreationTimestamp(pod),
+		Namespace:                 utils.ExtractNamespace(pod),
+		Labels:                    utils.ExtractLabels(pod),
+		Annotations:               utils.ExtractAnnotations(pod),
+		CreatedByKind:             createdByKind,
+		CreatedByName:             createdByName,
 		PodUID:                    string(pod.UID),
 		NodeName:                  pod.Spec.NodeName,
 		NodeLabels:                nodeLabels,
@@ -386,17 +372,17 @@ func aggregateContainerResources(pod *corev1.Pod) containerResourceAggregation {
 
 	var maxInitCPU, maxInitMemory, maxInitCPULimit, maxInitMemoryLimit int64
 	for _, container := range pod.Spec.InitContainers {
-		if cpu := utils.ExtractCPUMillicores(container.Resources.Requests); cpu != nil && *cpu > maxInitCPU {
-			maxInitCPU = *cpu
+		if cpu := utils.ExtractCPUMillicores(container.Resources.Requests); cpu != nil {
+			maxInitCPU = max(maxInitCPU, *cpu)
 		}
-		if memory := utils.ExtractMemoryBytes(container.Resources.Requests); memory != nil && *memory > maxInitMemory {
-			maxInitMemory = *memory
+		if memory := utils.ExtractMemoryBytes(container.Resources.Requests); memory != nil {
+			maxInitMemory = max(maxInitMemory, *memory)
 		}
-		if cpu := utils.ExtractCPUMillicores(container.Resources.Limits); cpu != nil && *cpu > maxInitCPULimit {
-			maxInitCPULimit = *cpu
+		if cpu := utils.ExtractCPUMillicores(container.Resources.Limits); cpu != nil {
+			maxInitCPULimit = max(maxInitCPULimit, *cpu)
 		}
-		if memory := utils.ExtractMemoryBytes(container.Resources.Limits); memory != nil && *memory > maxInitMemoryLimit {
-			maxInitMemoryLimit = *memory
+		if memory := utils.ExtractMemoryBytes(container.Resources.Limits); memory != nil {
+			maxInitMemoryLimit = max(maxInitMemoryLimit, *memory)
 		}
 	}
 
@@ -420,29 +406,10 @@ func aggregateContainerResources(pod *corev1.Pod) containerResourceAggregation {
 	// Following Kubernetes scheduler logic: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/#resources
 	// Only set if there are any containers (init or regular)
 	if result.ContainerCount > 0 || result.InitContainerCount > 0 {
-		if maxInitCPU > sumRegularCPU {
-			result.TotalRequestsCPUMillicore = &maxInitCPU
-		} else {
-			result.TotalRequestsCPUMillicore = &sumRegularCPU
-		}
-
-		if maxInitMemory > sumRegularMemory {
-			result.TotalRequestsMemoryBytes = &maxInitMemory
-		} else {
-			result.TotalRequestsMemoryBytes = &sumRegularMemory
-		}
-
-		if maxInitCPULimit > sumRegularCPULimit {
-			result.TotalLimitsCPUMillicore = &maxInitCPULimit
-		} else {
-			result.TotalLimitsCPUMillicore = &sumRegularCPULimit
-		}
-
-		if maxInitMemoryLimit > sumRegularMemoryLimit {
-			result.TotalLimitsMemoryBytes = &maxInitMemoryLimit
-		} else {
-			result.TotalLimitsMemoryBytes = &sumRegularMemoryLimit
-		}
+		result.TotalRequestsCPUMillicore = new(max(maxInitCPU, sumRegularCPU))
+		result.TotalRequestsMemoryBytes = new(max(maxInitMemory, sumRegularMemory))
+		result.TotalLimitsCPUMillicore = new(max(maxInitCPULimit, sumRegularCPULimit))
+		result.TotalLimitsMemoryBytes = new(max(maxInitMemoryLimit, sumRegularMemoryLimit))
 	}
 
 	return result

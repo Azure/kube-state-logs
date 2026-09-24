@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -21,35 +21,29 @@ import (
 
 func TestIngressClassHandler(t *testing.T) {
 	ic1 := &networkingv1.IngressClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "nginx",
-			Labels:            map[string]string{"type": "load-balancer"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "nginx",
+		Labels:            map[string]string{"type": "load-balancer"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.IngressClassSpec{
 			Controller: "k8s.io/ingress-nginx",
 		},
 	}
 
 	ic2 := &networkingv1.IngressClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "default-nginx",
-			Annotations: map[string]string{
-				"ingressclass.kubernetes.io/is-default-class": "true",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name: "default-nginx",
+		Annotations: map[string]string{
+			"ingressclass.kubernetes.io/is-default-class": "true",
 		},
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.IngressClassSpec{
 			Controller: "k8s.io/ingress-nginx",
 		},
 	}
 
 	icEmptyController := &networkingv1.IngressClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "empty-controller",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "empty-controller",
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.IngressClassSpec{
 			Controller: "",
 		},
@@ -60,7 +54,7 @@ func TestIngressClassHandler(t *testing.T) {
 		ingressClasses []*networkingv1.IngressClass
 		expectedCount  int
 		expectedNames  []string
-		expectedFields map[string]interface{}
+		expectedFields map[string]any
 	}{
 		{
 			name:           "collect all ingress classes",
@@ -73,7 +67,7 @@ func TestIngressClassHandler(t *testing.T) {
 			ingressClasses: []*networkingv1.IngressClass{ic2},
 			expectedCount:  1,
 			expectedNames:  []string{"default-nginx"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"is_default": true,
 			},
 		},
@@ -82,7 +76,7 @@ func TestIngressClassHandler(t *testing.T) {
 			ingressClasses: []*networkingv1.IngressClass{ic1},
 			expectedCount:  1,
 			expectedNames:  []string{"nginx"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"controller": "k8s.io/ingress-nginx",
 			},
 		},
@@ -91,7 +85,7 @@ func TestIngressClassHandler(t *testing.T) {
 			ingressClasses: []*networkingv1.IngressClass{icEmptyController},
 			expectedCount:  1,
 			expectedNames:  []string{"empty-controller"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"controller": "",
 			},
 		},
@@ -110,11 +104,11 @@ func TestIngressClassHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), []string{})
+			entries, err := handler.Collect(t.Context(), []string{})
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -130,13 +124,7 @@ func TestIngressClassHandler(t *testing.T) {
 				entryNames[i] = ingressClassData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find ingress class with name %s", expectedName)
 				}
@@ -186,11 +174,11 @@ func TestIngressClassHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -209,7 +197,7 @@ func TestIngressClassHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &networkingv1.NetworkPolicy{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}

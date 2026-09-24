@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -29,16 +28,14 @@ func createTestMutatingWebhookConfiguration(name string) *admissionregistrationv
 	scope := admissionregistrationv1.NamespacedScope
 
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"app": "test-app",
-			},
-			Annotations: map[string]string{
-				"test-annotation": "test-value",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name: name,
+		Labels: map[string]string{
+			"app": "test-app",
 		},
+		Annotations: map[string]string{
+			"test-annotation": "test-value",
+		},
+		CreationTimestamp: metav1.Now(),
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
 			{
 				Name: "test-webhook",
@@ -58,12 +55,10 @@ func createTestMutatingWebhookConfiguration(name string) *admissionregistrationv
 							admissionregistrationv1.Create,
 							admissionregistrationv1.Update,
 						},
-						Rule: admissionregistrationv1.Rule{
-							APIGroups:   []string{"apps"},
-							APIVersions: []string{"v1"},
-							Resources:   []string{"deployments"},
-							Scope:       &scope,
-						},
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+						Scope:       &scope,
 					},
 				},
 				FailurePolicy:           &failurePolicy,
@@ -90,10 +85,10 @@ func TestMutatingWebhookConfigurationHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -126,9 +121,9 @@ func TestMutatingWebhookConfigurationHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	factory.WaitForCacheSync(context.Background().Done())
-	entries, err := handler.Collect(context.Background(), []string{})
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -147,9 +142,9 @@ func TestMutatingWebhookConfigurationHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	factory.Start(context.Background().Done())
-	factory.WaitForCacheSync(context.Background().Done())
-	entries, err := handler.Collect(context.Background(), []string{})
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}

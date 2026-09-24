@@ -78,18 +78,12 @@ func (h *CertificateSigningRequestHandler) createLogEntry(csr *certificatesv1.Ce
 
 	// Create data structure
 	data := types.CertificateSigningRequestData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "certificatesigningrequest",
-				Name:             utils.ExtractName(csr),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(csr),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(csr),
-				Annotations: utils.ExtractAnnotations(csr),
-			},
-		},
+		Timestamp:         time.Now(),
+		ResourceType:      "certificatesigningrequest",
+		Name:              utils.ExtractName(csr),
+		CreatedTimestamp:  utils.ExtractCreationTimestamp(csr),
+		Labels:            utils.ExtractLabels(csr),
+		Annotations:       utils.ExtractAnnotations(csr),
 		Status:            status,
 		SignerName:        csr.Spec.SignerName,
 		ExpirationSeconds: csr.Spec.ExpirationSeconds,

@@ -89,26 +89,14 @@ func (h *CronJobHandler) createLogEntry(cronjob *batchv1.CronJob) types.CronJobD
 		lastScheduleTime = &cronjob.Status.LastScheduleTime.Time
 	}
 
-	// Check conditions in a single loop
-	conditionActive := len(cronjob.Status.Active) > 0
-	conditionActivePtr := &conditionActive
-
 	data := types.CronJobData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "cronjob",
-					Name:             utils.ExtractName(cronjob),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(cronjob),
-				},
-				Namespace: utils.ExtractNamespace(cronjob),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(cronjob),
-				Annotations: utils.ExtractAnnotations(cronjob),
-			},
-		},
+		Timestamp:                  time.Now(),
+		ResourceType:               "cronjob",
+		Name:                       utils.ExtractName(cronjob),
+		CreatedTimestamp:           utils.ExtractCreationTimestamp(cronjob),
+		Namespace:                  utils.ExtractNamespace(cronjob),
+		Labels:                     utils.ExtractLabels(cronjob),
+		Annotations:                utils.ExtractAnnotations(cronjob),
 		Schedule:                   cronjob.Spec.Schedule,
 		ConcurrencyPolicy:          concurrencyPolicy,
 		Suspend:                    suspend,
@@ -117,7 +105,7 @@ func (h *CronJobHandler) createLogEntry(cronjob *batchv1.CronJob) types.CronJobD
 		ActiveJobsCount:            int32(len(cronjob.Status.Active)),
 		LastScheduleTime:           lastScheduleTime,
 		NextScheduleTime:           nil,
-		ConditionActive:            conditionActivePtr,
+		ConditionActive:            new(len(cronjob.Status.Active) > 0),
 	}
 
 	return data

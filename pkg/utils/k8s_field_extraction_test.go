@@ -32,20 +32,16 @@ func TestExtractAnnotations(t *testing.T) {
 		{
 			name: "pod with empty annotations",
 			obj: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{},
-				},
+				Annotations: map[string]string{},
 			},
 			want: nil,
 		},
 		{
 			name: "pod with normal annotations",
 			obj: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"app":     "test-app",
-						"version": "1.0.0",
-					},
+				Annotations: map[string]string{
+					"app":     "test-app",
+					"version": "1.0.0",
 				},
 			},
 			want: map[string]string{
@@ -56,10 +52,8 @@ func TestExtractAnnotations(t *testing.T) {
 		{
 			name: "deployment with last-applied-configuration annotation only",
 			obj: &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"test"}}`,
-					},
+				Annotations: map[string]string{
+					"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"test"}}`,
 				},
 			},
 			want: nil,
@@ -67,12 +61,10 @@ func TestExtractAnnotations(t *testing.T) {
 		{
 			name: "pod with last-applied-configuration and other annotations",
 			obj: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"app":     "test-app",
-						"version": "1.0.0",
-						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"v1","kind":"Pod","metadata":{"name":"test"}}`,
-					},
+				Annotations: map[string]string{
+					"app":     "test-app",
+					"version": "1.0.0",
+					"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"v1","kind":"Pod","metadata":{"name":"test"}}`,
 				},
 			},
 			want: map[string]string{
@@ -83,14 +75,12 @@ func TestExtractAnnotations(t *testing.T) {
 		{
 			name: "deployment with multiple annotations including last-applied-configuration",
 			obj: &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"app":     "test-app",
-						"version": "1.0.0",
-						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"test","annotations":{"app":"test-app","version":"1.0.0"}}}`,
-						"prometheus.io/scrape":                             "true",
-						"prometheus.io/port":                               "8080",
-					},
+				Annotations: map[string]string{
+					"app":     "test-app",
+					"version": "1.0.0",
+					"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"test","annotations":{"app":"test-app","version":"1.0.0"}}}`,
+					"prometheus.io/scrape":                             "true",
+					"prometheus.io/port":                               "8080",
 				},
 			},
 			want: map[string]string{
@@ -126,9 +116,7 @@ func TestExtractName(t *testing.T) {
 		{
 			name: "pod with name",
 			obj: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pod",
-				},
+				Name: "test-pod",
 			},
 			want: "test-pod",
 		},
@@ -158,9 +146,7 @@ func TestExtractNamespace(t *testing.T) {
 		{
 			name: "deployment with namespace",
 			obj: &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "test-namespace",
-				},
+				Namespace: "test-namespace",
 			},
 			want: "test-namespace",
 		},
@@ -193,9 +179,7 @@ func TestExtractCreationTimestamp(t *testing.T) {
 		{
 			name: "deployment with creation timestamp",
 			obj: &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					CreationTimestamp: metaTime,
-				},
+				CreationTimestamp: metaTime,
 			},
 			want: fixedTime,
 		},

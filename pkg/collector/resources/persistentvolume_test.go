@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -23,12 +23,10 @@ import (
 func TestPersistentVolumeHandler(t *testing.T) {
 	volumeMode := corev1.PersistentVolumeFilesystem
 	pv1 := &corev1.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "pv1",
-			Labels:            map[string]string{"env": "prod"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "pv1",
+		Labels:            map[string]string{"env": "prod"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.PersistentVolumeSpec{
 			Capacity: corev1.ResourceList{
 				corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -49,10 +47,8 @@ func TestPersistentVolumeHandler(t *testing.T) {
 	}
 
 	pv2 := &corev1.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "pv2",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "pv2",
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.PersistentVolumeSpec{
 			Capacity: corev1.ResourceList{
 				corev1.ResourceStorage: resource.MustParse("20Gi"),
@@ -77,7 +73,7 @@ func TestPersistentVolumeHandler(t *testing.T) {
 		pvs            []*corev1.PersistentVolume
 		expectedCount  int
 		expectedNames  []string
-		expectedFields map[string]interface{}
+		expectedFields map[string]any
 	}{
 		{
 			name:          "collect all pvs",
@@ -90,7 +86,7 @@ func TestPersistentVolumeHandler(t *testing.T) {
 			pvs:           []*corev1.PersistentVolume{pv1},
 			expectedCount: 1,
 			expectedNames: []string{"pv1"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"access_modes":       "ReadWriteOnce",
 				"storage_class":      "fast",
 				"status":             "Available",
@@ -103,7 +99,7 @@ func TestPersistentVolumeHandler(t *testing.T) {
 			pvs:           []*corev1.PersistentVolume{pv2},
 			expectedCount: 1,
 			expectedNames: []string{"pv2"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"access_modes":       "ReadOnlyMany",
 				"status":             "Bound",
 				"volume_plugin_name": "nfs",
@@ -125,11 +121,11 @@ func TestPersistentVolumeHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), []string{})
+			entries, err := handler.Collect(t.Context(), []string{})
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -145,13 +141,7 @@ func TestPersistentVolumeHandler(t *testing.T) {
 				entryNames[i] = persistentVolumeData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find pv with name %s", expectedName)
 				}
@@ -219,11 +209,11 @@ func TestPersistentVolumeHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -242,7 +232,7 @@ func TestPersistentVolumeHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -255,17 +245,15 @@ func TestPersistentVolumeHandler_InvalidObject(t *testing.T) {
 func createTestPV(name string, phase corev1.PersistentVolumePhase) *corev1.PersistentVolume {
 	volumeMode := corev1.PersistentVolumeFilesystem
 	pv := &corev1.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test persistent volume",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name: name,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test persistent volume",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.PersistentVolumeSpec{
 			Capacity: corev1.ResourceList{
 				corev1.ResourceStorage: resource.MustParse("1Gi"),
@@ -301,10 +289,10 @@ func TestPersistentVolumeHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

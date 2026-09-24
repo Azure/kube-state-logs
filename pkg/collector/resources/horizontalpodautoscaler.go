@@ -127,21 +127,13 @@ func (h *HorizontalPodAutoscalerHandler) createLogEntry(hpa *autoscalingv2.Horiz
 	}
 
 	data := types.HorizontalPodAutoscalerData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "horizontalpodautoscaler",
-					Name:             utils.ExtractName(hpa),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(hpa),
-				},
-				Namespace: utils.ExtractNamespace(hpa),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(hpa),
-				Annotations: utils.ExtractAnnotations(hpa),
-			},
-		},
+		Timestamp:                          time.Now(),
+		ResourceType:                       "horizontalpodautoscaler",
+		Name:                               utils.ExtractName(hpa),
+		CreatedTimestamp:                   utils.ExtractCreationTimestamp(hpa),
+		Namespace:                          utils.ExtractNamespace(hpa),
+		Labels:                             utils.ExtractLabels(hpa),
+		Annotations:                        utils.ExtractAnnotations(hpa),
 		MinReplicas:                        &minReplicas,
 		MaxReplicas:                        hpa.Spec.MaxReplicas,
 		TargetCPUUtilizationPercentage:     targetCPUUtilizationPercentage,

@@ -1,5 +1,22 @@
 # Contributing
 
+## Local development
+
+Use Go 1.27.1 or newer. Run `go test ./...` and `gofmt -l .` before submitting
+changes. Run `make test` to exercise the same Microsoft Go/OpenSSL build used
+by CI; Docker is required for that target.
+
+Use modern Go idioms such as promoted-field literals, `new(value)`, `wg.Go`,
+and the `maps` and `slices` helpers. In tests, use `t.Context()` for work that
+should stop when the test finishes; retain explicit cancellation where the test
+exercises shutdown behavior.
+
+The JSON log format is a compatibility contract. Do not migrate the existing
+`encoding/json` implementation or change omission tags as part of routine
+modernization.
+
+## Contribution process
+
 This project welcomes contributions and suggestions. Most contributions require you to
 agree to a Contributor License Agreement (CLA) declaring that you have the right to,
 and actually do, grant us the rights to use your contribution. For details, visit

@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,20 +22,18 @@ import (
 
 func TestEndpointsHandler(t *testing.T) {
 	endpoints1 := &corev1.Endpoints{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "service1",
-			Namespace:         "default",
-			Labels:            map[string]string{"app": "web"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "service1",
+		Namespace:         "default",
+		Labels:            map[string]string{"app": "web"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Subsets: []corev1.EndpointSubset{
 			{
 				Addresses: []corev1.EndpointAddress{
 					{
 						IP:       "10.0.0.1",
 						Hostname: "pod1",
-						NodeName: stringPtr("node1"),
+						NodeName: new("node1"),
 						TargetRef: &corev1.ObjectReference{
 							Kind: "Pod",
 							Name: "pod1",
@@ -44,7 +42,7 @@ func TestEndpointsHandler(t *testing.T) {
 					{
 						IP:       "10.0.0.2",
 						Hostname: "pod2",
-						NodeName: stringPtr("node2"),
+						NodeName: new("node2"),
 						TargetRef: &corev1.ObjectReference{
 							Kind: "Pod",
 							Name: "pod2",
@@ -68,11 +66,9 @@ func TestEndpointsHandler(t *testing.T) {
 	}
 
 	endpoints2 := &corev1.Endpoints{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "service2",
-			Namespace:         "kube-system",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "service2",
+		Namespace:         "kube-system",
+		CreationTimestamp: metav1.Now(),
 		Subsets: []corev1.EndpointSubset{
 			{
 				Addresses: []corev1.EndpointAddress{
@@ -92,12 +88,10 @@ func TestEndpointsHandler(t *testing.T) {
 	}
 
 	endpointsEmpty := &corev1.Endpoints{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "empty-service",
-			Namespace:         "default",
-			CreationTimestamp: metav1.Now(),
-		},
-		Subsets: []corev1.EndpointSubset{},
+		Name:              "empty-service",
+		Namespace:         "default",
+		CreationTimestamp: metav1.Now(),
+		Subsets:           []corev1.EndpointSubset{},
 	}
 
 	tests := []struct {
@@ -106,7 +100,7 @@ func TestEndpointsHandler(t *testing.T) {
 		namespaces     []string
 		expectedCount  int
 		expectedNames  []string
-		expectedFields map[string]interface{}
+		expectedFields map[string]any
 	}{
 		{
 			name:          "collect all endpoints",
@@ -128,7 +122,7 @@ func TestEndpointsHandler(t *testing.T) {
 			namespaces:    []string{},
 			expectedCount: 1,
 			expectedNames: []string{"service1"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"ready": true,
 			},
 		},
@@ -138,7 +132,7 @@ func TestEndpointsHandler(t *testing.T) {
 			namespaces:    []string{},
 			expectedCount: 1,
 			expectedNames: []string{"empty-service"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"ready": false,
 			},
 		},
@@ -157,11 +151,11 @@ func TestEndpointsHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.namespaces)
+			entries, err := handler.Collect(t.Context(), tt.namespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -177,13 +171,7 @@ func TestEndpointsHandler(t *testing.T) {
 				entryNames[i] = endpointsData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find endpoints with name %s", expectedName)
 				}
@@ -239,11 +227,11 @@ func TestEndpointsHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -262,7 +250,7 @@ func TestEndpointsHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -271,25 +259,19 @@ func TestEndpointsHandler_InvalidObject(t *testing.T) {
 	}
 }
 
-func stringPtr(s string) *string {
-	return &s
-}
-
 // createTestEndpoints creates a test endpoints with various configurations
 func createTestEndpoints(name, namespace string, addresses int) *corev1.Endpoints {
 	endpoints := &corev1.Endpoints{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test endpoints",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test endpoints",
+		},
+		CreationTimestamp: metav1.Now(),
 		Subsets: []corev1.EndpointSubset{
 			{
 				Addresses: make([]corev1.EndpointAddress, addresses),
@@ -320,11 +302,11 @@ func createTestEndpoints(name, namespace string, addresses int) *corev1.Endpoint
 	}
 
 	// Populate addresses
-	for i := 0; i < addresses; i++ {
+	for i := range addresses {
 		endpoints.Subsets[0].Addresses[i] = corev1.EndpointAddress{
 			IP:       "10.244.0.1",
 			Hostname: "test-pod-1",
-			NodeName: stringPtr("test-node"),
+			NodeName: new("test-node"),
 			TargetRef: &corev1.ObjectReference{
 				Kind:      "Pod",
 				Name:      "test-pod-1",
@@ -381,10 +363,10 @@ func TestEndpointsHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -466,10 +448,10 @@ func TestEndpointsHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test multiple namespace filtering
 	entries, err := handler.Collect(ctx, []string{"default", "monitoring"})

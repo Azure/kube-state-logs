@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,29 +22,23 @@ import (
 
 func TestRuntimeClassHandler(t *testing.T) {
 	rc1 := &nodev1.RuntimeClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "runc",
-			Labels:            map[string]string{"type": "default"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
-		Handler: "runc",
+		Name:              "runc",
+		Labels:            map[string]string{"type": "default"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
+		Handler:           "runc",
 	}
 
 	rc2 := &nodev1.RuntimeClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "kata-containers",
-			CreationTimestamp: metav1.Now(),
-		},
-		Handler: "kata-containers",
+		Name:              "kata-containers",
+		CreationTimestamp: metav1.Now(),
+		Handler:           "kata-containers",
 	}
 
 	rcEmpty := &nodev1.RuntimeClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "empty-runtime",
-			CreationTimestamp: metav1.Now(),
-		},
-		Handler: "default",
+		Name:              "empty-runtime",
+		CreationTimestamp: metav1.Now(),
+		Handler:           "default",
 	}
 
 	tests := []struct {
@@ -80,11 +74,11 @@ func TestRuntimeClassHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), []string{})
+			entries, err := handler.Collect(t.Context(), []string{})
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -100,13 +94,7 @@ func TestRuntimeClassHandler(t *testing.T) {
 				entryNames[i] = runtimeClassData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find runtime class with name %s", expectedName)
 				}
@@ -142,11 +130,11 @@ func TestRuntimeClassHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -165,7 +153,7 @@ func TestRuntimeClassHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}

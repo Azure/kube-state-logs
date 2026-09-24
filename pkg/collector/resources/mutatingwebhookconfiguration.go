@@ -128,19 +128,13 @@ func (h *MutatingWebhookConfigurationHandler) createLogEntry(webhook *admissionr
 
 	// Create data structure
 	data := types.MutatingWebhookConfigurationData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "mutatingwebhookconfiguration",
-				Name:             utils.ExtractName(webhook),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(webhook),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(webhook),
-				Annotations: utils.ExtractAnnotations(webhook),
-			},
-		},
-		Webhooks: webhooks,
+		Timestamp:        time.Now(),
+		ResourceType:     "mutatingwebhookconfiguration",
+		Name:             utils.ExtractName(webhook),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(webhook),
+		Labels:           utils.ExtractLabels(webhook),
+		Annotations:      utils.ExtractAnnotations(webhook),
+		Webhooks:         webhooks,
 	}
 
 	return data

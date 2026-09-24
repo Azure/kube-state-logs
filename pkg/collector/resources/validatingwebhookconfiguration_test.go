@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -28,17 +28,15 @@ func TestValidatingWebhookConfigurationHandler(t *testing.T) {
 	port := int32(443)
 
 	vwc1 := &admissionregistrationv1.ValidatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "vwc-1",
-			Labels:            map[string]string{"env": "prod"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "vwc-1",
+		Labels:            map[string]string{"env": "prod"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Webhooks: []admissionregistrationv1.ValidatingWebhook{
 			{
 				Name: "webhook-1",
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
-					URL:      strPtr("https://webhook1.example.com"),
+					URL:      new("https://webhook1.example.com"),
 					CABundle: []byte("fake-ca-bundle"),
 					Service: &admissionregistrationv1.ServiceReference{
 						Namespace: "default",
@@ -49,12 +47,10 @@ func TestValidatingWebhookConfigurationHandler(t *testing.T) {
 				},
 				Rules: []admissionregistrationv1.RuleWithOperations{
 					{
-						Rule: admissionregistrationv1.Rule{
-							APIGroups:   []string{"apps"},
-							APIVersions: []string{"v1"},
-							Resources:   []string{"deployments"},
-							Scope:       &[]admissionregistrationv1.ScopeType{admissionregistrationv1.NamespacedScope}[0],
-						},
+						APIGroups:   []string{"apps"},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"deployments"},
+						Scope:       &[]admissionregistrationv1.ScopeType{admissionregistrationv1.NamespacedScope}[0],
 					},
 				},
 				FailurePolicy:           &failurePolicy,
@@ -69,10 +65,8 @@ func TestValidatingWebhookConfigurationHandler(t *testing.T) {
 	}
 
 	vwc2 := &admissionregistrationv1.ValidatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "vwc-2",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "vwc-2",
+		CreationTimestamp: metav1.Now(),
 	}
 
 	tests := []struct {
@@ -102,11 +96,11 @@ func TestValidatingWebhookConfigurationHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), []string{})
+			entries, err := handler.Collect(t.Context(), []string{})
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -122,13 +116,7 @@ func TestValidatingWebhookConfigurationHandler(t *testing.T) {
 				entryNames[i] = webhookConfigData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find validating webhook configuration with name %s", expectedName)
 				}
@@ -153,10 +141,6 @@ func TestValidatingWebhookConfigurationHandler(t *testing.T) {
 	}
 }
 
-func strPtr(s string) *string {
-	return &s
-}
-
 func TestValidatingWebhookConfigurationHandler_EmptyCache(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	handler := NewValidatingWebhookConfigurationHandler(client)
@@ -165,11 +149,11 @@ func TestValidatingWebhookConfigurationHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -186,11 +170,11 @@ func TestValidatingWebhookConfigurationHandler_InvalidObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -201,10 +185,8 @@ func TestValidatingWebhookConfigurationHandler_InvalidObject(t *testing.T) {
 
 func createTestValidatingWebhookConfiguration(name string) *admissionregistrationv1.ValidatingWebhookConfiguration {
 	return &admissionregistrationv1.ValidatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              name,
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              name,
+		CreationTimestamp: metav1.Now(),
 	}
 }
 
@@ -226,11 +208,11 @@ func TestValidatingWebhookConfigurationHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all validating webhook configurations
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

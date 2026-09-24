@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -21,19 +20,17 @@ import (
 // createTestDaemonSet creates a test daemonset with various configurations
 func createTestDaemonSet(name, namespace string) *appsv1.DaemonSet {
 	daemonSet := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test daemonset",
-			},
-			CreationTimestamp: metav1.Now(),
-			Generation:        1,
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test daemonset",
+		},
+		CreationTimestamp: metav1.Now(),
+		Generation:        1,
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -108,11 +105,11 @@ func TestDaemonSetHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all daemonsets
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -237,10 +234,10 @@ func TestDaemonSetHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test multiple namespace filtering
 	entries, err := handler.Collect(ctx, []string{"default", "monitoring"})

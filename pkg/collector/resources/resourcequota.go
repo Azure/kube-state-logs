@@ -80,24 +80,16 @@ func (h *ResourceQuotaHandler) createLogEntry(quota *corev1.ResourceQuota) types
 
 	// Create data structure
 	data := types.ResourceQuotaData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "resourcequota",
-					Name:             utils.ExtractName(quota),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(quota),
-				},
-				Namespace: utils.ExtractNamespace(quota),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(quota),
-				Annotations: utils.ExtractAnnotations(quota),
-			},
-		},
-		Hard:   hard,
-		Used:   used,
-		Scopes: scopes,
+		Timestamp:        time.Now(),
+		ResourceType:     "resourcequota",
+		Name:             utils.ExtractName(quota),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(quota),
+		Namespace:        utils.ExtractNamespace(quota),
+		Labels:           utils.ExtractLabels(quota),
+		Annotations:      utils.ExtractAnnotations(quota),
+		Hard:             hard,
+		Used:             used,
+		Scopes:           scopes,
 	}
 
 	return data

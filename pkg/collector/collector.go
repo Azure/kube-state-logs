@@ -6,6 +6,8 @@ package collector
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -312,9 +314,7 @@ func (c *Collector) registerHandlers() {
 		"validatingadmissionpolicybinding": resources.NewValidatingAdmissionPolicyBindingHandler(c.client),
 	}
 
-	for resourceName, handler := range handlers {
-		c.handlers[resourceName] = handler
-	}
+	maps.Copy(c.handlers, handlers)
 }
 
 // registerCRDHandlers registers CRD handlers based on configuration
@@ -609,25 +609,20 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 
 			klog.Infof("Starting kubelet ticker for %s with interval %v", resourceName, interval)
 
-			c.wg.Add(1)
-			go func(name string, tickerInterval time.Duration, h interfaces.KubeletHandler) {
-				defer c.wg.Done()
-
-				validatedInterval := validateTickerInterval(tickerInterval, name)
-				ticker := time.NewTicker(validatedInterval)
-				defer ticker.Stop()
+			c.wg.Go(func() {
+				ticker := time.Tick(validateTickerInterval(interval, resourceName))
 
 				for {
 					select {
 					case <-ctx.Done():
 						return
-					case <-ticker.C:
-						if err := c.collectAndLogKubeletResource(ctx, name, h); err != nil {
-							klog.Errorf("Kubelet collection failed for %s: %v", name, err)
+					case <-ticker:
+						if err := c.collectAndLogKubeletResource(ctx, resourceName, kubeletHandler); err != nil {
+							klog.Errorf("Kubelet collection failed for %s: %v", resourceName, err)
 						}
 					}
 				}
-			}(resourceName, interval, kubeletHandler)
+			})
 			continue
 		}
 
@@ -648,37 +643,25 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 
 		klog.Infof("Starting ticker for %s with interval %v", resourceName, interval)
 
-		c.wg.Add(1)
-		go func(name string, tickerInterval time.Duration, h interfaces.ResourceHandler) {
-			defer c.wg.Done()
-
-			// Validate ticker interval to prevent panics
-			validatedInterval := validateTickerInterval(tickerInterval, name)
-			ticker := time.NewTicker(validatedInterval)
-			defer ticker.Stop()
+		c.wg.Go(func() {
+			ticker := time.Tick(validateTickerInterval(interval, resourceName))
 
 			for {
 				select {
 				case <-ctx.Done():
 					return
-				case <-ticker.C:
-					if err := c.collectAndLogResource(ctx, name, h); err != nil {
-						klog.Errorf("Collection failed for %s: %v", name, err)
+				case <-ticker:
+					if err := c.collectAndLogResource(ctx, resourceName, handler); err != nil {
+						klog.Errorf("Collection failed for %s: %v", resourceName, err)
 					}
 				}
 			}
-		}(resourceName, interval, handler)
+		})
 	}
 
 	// Start tickers for CRD resources
 	// Only start CRD tickers if "crd" is in the resources list OR if no standard resources are configured
-	shouldStartCRDTickers := false
-	for _, resourceName := range c.config.Resources {
-		if resourceName == "crd" {
-			shouldStartCRDTickers = true
-			break
-		}
-	}
+	shouldStartCRDTickers := slices.Contains(c.config.Resources, "crd")
 
 	// Also start CRD tickers if no standard resources are configured (CRD-only mode)
 	if !shouldStartCRDTickers && len(resourceIntervals) == 0 {

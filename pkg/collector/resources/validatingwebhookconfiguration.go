@@ -128,18 +128,12 @@ func (h *ValidatingWebhookConfigurationHandler) createLogEntry(webhook *admissio
 
 	// Create data structure
 	data := types.ValidatingWebhookConfigurationData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "validatingwebhookconfiguration",
-				Name:             utils.ExtractName(webhook),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(webhook),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(webhook),
-				Annotations: utils.ExtractAnnotations(webhook),
-			},
-		},
+		Timestamp:        time.Now(),
+		ResourceType:     "validatingwebhookconfiguration",
+		Name:             utils.ExtractName(webhook),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(webhook),
+		Labels:           utils.ExtractLabels(webhook),
+		Annotations:      utils.ExtractAnnotations(webhook),
 		Webhooks: func() []types.WebhookData {
 			if webhooks == nil {
 				return []types.WebhookData{}

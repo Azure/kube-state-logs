@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,13 +22,11 @@ import (
 
 func TestLimitRangeHandler(t *testing.T) {
 	lr1 := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "compute-limits",
-			Namespace:         "default",
-			Labels:            map[string]string{"env": "prod"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "compute-limits",
+		Namespace:         "default",
+		Labels:            map[string]string{"env": "prod"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.LimitRangeSpec{
 			Limits: []corev1.LimitRangeItem{
 				{
@@ -58,11 +56,9 @@ func TestLimitRangeHandler(t *testing.T) {
 	}
 
 	lr2 := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "pod-limits",
-			Namespace:         "kube-system",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "pod-limits",
+		Namespace:         "kube-system",
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.LimitRangeSpec{
 			Limits: []corev1.LimitRangeItem{
 				{
@@ -81,11 +77,9 @@ func TestLimitRangeHandler(t *testing.T) {
 	}
 
 	lrEmpty := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "empty-limits",
-			Namespace:         "default",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "empty-limits",
+		Namespace:         "default",
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.LimitRangeSpec{
 			Limits: []corev1.LimitRangeItem{},
 		},
@@ -141,11 +135,11 @@ func TestLimitRangeHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.namespaces)
+			entries, err := handler.Collect(t.Context(), tt.namespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -161,13 +155,7 @@ func TestLimitRangeHandler(t *testing.T) {
 				entryNames[i] = limitRangeData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find limit range with name %s", expectedName)
 				}
@@ -206,11 +194,11 @@ func TestLimitRangeHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -229,7 +217,7 @@ func TestLimitRangeHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -241,18 +229,16 @@ func TestLimitRangeHandler_InvalidObject(t *testing.T) {
 // createTestLimitRange creates a test LimitRange with various configurations
 func createTestLimitRange(name, namespace string) *corev1.LimitRange {
 	limitRange := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test limit range",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test limit range",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.LimitRangeSpec{
 			Limits: []corev1.LimitRangeItem{
 				{
@@ -287,10 +273,10 @@ func TestLimitRangeHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

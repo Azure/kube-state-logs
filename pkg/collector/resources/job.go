@@ -113,27 +113,15 @@ func (h *JobHandler) createLogEntry(job *batchv1.Job) types.JobData {
 	createdByKind, createdByName := utils.GetOwnerReferenceInfo(job)
 
 	data := types.JobData{
-		ControllerCreatedResourceMetadata: types.ControllerCreatedResourceMetadata{
-			NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-				NamespacedMetadata: types.NamespacedMetadata{
-					BaseMetadata: types.BaseMetadata{
-						Timestamp:        time.Now(),
-						ResourceType:     "job",
-						Name:             utils.ExtractName(job),
-						CreatedTimestamp: utils.ExtractCreationTimestamp(job),
-					},
-					Namespace: utils.ExtractNamespace(job),
-				},
-				LabeledMetadata: types.LabeledMetadata{
-					Labels:      utils.ExtractLabels(job),
-					Annotations: utils.ExtractAnnotations(job),
-				},
-			},
-			ControllerCreatedMetadata: types.ControllerCreatedMetadata{
-				CreatedByKind: createdByKind,
-				CreatedByName: createdByName,
-			},
-		},
+		Timestamp:             time.Now(),
+		ResourceType:          "job",
+		Name:                  utils.ExtractName(job),
+		CreatedTimestamp:      utils.ExtractCreationTimestamp(job),
+		Namespace:             utils.ExtractNamespace(job),
+		Labels:                utils.ExtractLabels(job),
+		Annotations:           utils.ExtractAnnotations(job),
+		CreatedByKind:         createdByKind,
+		CreatedByName:         createdByName,
 		ActivePods:            job.Status.Active,
 		SucceededPods:         job.Status.Succeeded,
 		FailedPods:            job.Status.Failed,

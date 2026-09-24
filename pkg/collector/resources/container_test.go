@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -43,19 +42,17 @@ func createTestContainer(name, image string, ready bool) *corev1.Container {
 // createTestPodWithContainers creates a test pod with containers
 func createTestPodWithContainers(name, namespace string, containers []corev1.Container) *corev1.Pod {
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			UID:       "test-pod-uid",
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test pod",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		UID:       "test-pod-uid",
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test pod",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.PodSpec{
 			Containers: containers,
 		},
@@ -137,11 +134,11 @@ func TestContainerHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all containers
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -181,12 +178,10 @@ func TestContainerHandler_PromotesSelectedNodeLabels(t *testing.T) {
 	pod := createTestPodWithContainers("test-pod", "default", []corev1.Container{*container})
 	pod.Spec.NodeName = "test-node"
 	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-node",
-			Labels: map[string]string{
-				"topology.kubernetes.io/zone": "westus2-1",
-				"kubernetes.io/arch":          "amd64",
-			},
+		Name: "test-node",
+		Labels: map[string]string{
+			"topology.kubernetes.io/zone": "westus2-1",
+			"kubernetes.io/arch":          "amd64",
 		},
 	}
 	client := fake.NewSimpleClientset(pod, node)
@@ -197,10 +192,10 @@ func TestContainerHandler_PromotesSelectedNodeLabels(t *testing.T) {
 	if err := handler.SetupInformer(factory, logger, time.Hour); err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	entries, err := handler.Collect(context.Background(), nil)
+	entries, err := handler.Collect(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -371,11 +366,11 @@ func TestContainerHandler_Collect_NamespaceFiltering(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting from specific namespace
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{"default"})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -407,10 +402,8 @@ func TestContainerHandler_InitContainerResources(t *testing.T) {
 
 	// Create test pod with both init and regular containers
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
+		Name:      "test-pod",
+		Namespace: "default",
 		Spec: corev1.PodSpec{
 			InitContainers: []corev1.Container{*initContainer},
 			Containers:     []corev1.Container{*regularContainer},
@@ -500,7 +493,7 @@ func TestContainerHandler_ExitDetection(t *testing.T) {
 	handler := NewContainerHandler(client, nil, []string{})
 
 	// First collection - should log running container
-	entries, err := handler.processPods(context.Background(), []any{pod}, []string{})
+	entries, err := handler.processPods(t.Context(), []any{pod}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -531,7 +524,7 @@ func TestContainerHandler_ExitDetection(t *testing.T) {
 	}
 
 	// Second collection - should log terminated container
-	entries, err = handler.processPods(context.Background(), []any{pod}, []string{})
+	entries, err = handler.processPods(t.Context(), []any{pod}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -579,7 +572,7 @@ func TestContainerHandler_FirstTimeTerminatedContainer(t *testing.T) {
 	handler := NewContainerHandler(client, nil, []string{})
 
 	// Collection - should log terminated container since we haven't seen it before
-	entries, err := handler.processPods(context.Background(), []any{pod}, []string{})
+	entries, err := handler.processPods(t.Context(), []any{pod}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -627,7 +620,7 @@ func TestContainerHandler_NoDuplicateExitLogs(t *testing.T) {
 	handler := NewContainerHandler(client, nil, []string{})
 
 	// First collection - should log terminated container
-	entries, err := handler.processPods(context.Background(), []any{pod}, []string{})
+	entries, err := handler.processPods(t.Context(), []any{pod}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -637,7 +630,7 @@ func TestContainerHandler_NoDuplicateExitLogs(t *testing.T) {
 	}
 
 	// Second collection - should NOT log the same terminated container again
-	entries, err = handler.processPods(context.Background(), []any{pod}, []string{})
+	entries, err = handler.processPods(t.Context(), []any{pod}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -653,10 +646,8 @@ func TestContainerHandler_InitContainerExitDetection(t *testing.T) {
 	regularContainer := createTestContainer("app", "nginx:latest", true)
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
+		Name:      "test-pod",
+		Namespace: "default",
 		Spec: corev1.PodSpec{
 			InitContainers: []corev1.Container{*initContainer},
 			Containers:     []corev1.Container{*regularContainer},
@@ -697,7 +688,7 @@ func TestContainerHandler_InitContainerExitDetection(t *testing.T) {
 	handler := NewContainerHandler(client, nil, []string{})
 
 	// First collection - should log running containers
-	entries, err := handler.processPods(context.Background(), []any{pod}, []string{})
+	entries, err := handler.processPods(t.Context(), []any{pod}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -718,7 +709,7 @@ func TestContainerHandler_InitContainerExitDetection(t *testing.T) {
 	}
 
 	// Second collection - should log running regular container + terminated init container
-	entries, err = handler.processPods(context.Background(), []any{pod}, []string{})
+	entries, err = handler.processPods(t.Context(), []any{pod}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -753,10 +744,8 @@ func TestContainerHandler_InitContainerExitDetection(t *testing.T) {
 
 func TestContainerHandler_createLogEntry_NilContainer(t *testing.T) {
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
+		Name:      "test-pod",
+		Namespace: "default",
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
@@ -837,7 +826,7 @@ func TestContainerHandler_TerminatedContainerTimeFiltering(t *testing.T) {
 	handler := NewContainerHandler(client, nil, []string{})
 
 	// Collection - should only log the recent terminated container
-	entries, err := handler.processPods(context.Background(), []any{pod1, pod2}, []string{})
+	entries, err := handler.processPods(t.Context(), []any{pod1, pod2}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -881,11 +870,11 @@ func TestContainerHandler_StateCacheSeparatesRecreatedPods(t *testing.T) {
 		return pod
 	}
 
-	entries, err := handler.processPods(context.Background(), []any{terminatedPod("uid-1")}, nil)
+	entries, err := handler.processPods(t.Context(), []any{terminatedPod("uid-1")}, nil)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("first pod: entries=%d err=%v", len(entries), err)
 	}
-	entries, err = handler.processPods(context.Background(), []any{terminatedPod("uid-2")}, nil)
+	entries, err = handler.processPods(t.Context(), []any{terminatedPod("uid-2")}, nil)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("recreated pod: entries=%d err=%v", len(entries), err)
 	}
@@ -1029,10 +1018,8 @@ func TestContainerHandler_ContainerID_InitContainer(t *testing.T) {
 	regularContainer.ImagePullPolicy = corev1.PullIfNotPresent
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
+		Name:      "test-pod",
+		Namespace: "default",
 		Spec: corev1.PodSpec{
 			InitContainers: []corev1.Container{*initContainer},
 			Containers:     []corev1.Container{*regularContainer},
@@ -1101,12 +1088,10 @@ func TestContainerHandler_MultipleContainersInPod(t *testing.T) {
 
 	// Create a pod with multiple containers
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "multi-container-pod",
-			Namespace: "default",
-			Labels: map[string]string{
-				"app": "multi-container-app",
-			},
+		Name:      "multi-container-pod",
+		Namespace: "default",
+		Labels: map[string]string{
+			"app": "multi-container-app",
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{*container1, *container2, *container3},
@@ -1158,7 +1143,7 @@ func TestContainerHandler_MultipleContainersInPod(t *testing.T) {
 	}
 
 	// Test processing all containers in the pod
-	entries, err := handler.processPods(context.Background(), []any{pod}, []string{})
+	entries, err := handler.processPods(t.Context(), []any{pod}, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -1179,7 +1164,7 @@ func TestContainerHandler_MultipleContainersInPod(t *testing.T) {
 	}
 
 	// Sort by container name for consistent testing
-	for i := 0; i < len(containerEntries); i++ {
+	for i := range containerEntries {
 		for j := i + 1; j < len(containerEntries); j++ {
 			if containerEntries[i].Name > containerEntries[j].Name {
 				containerEntries[i], containerEntries[j] = containerEntries[j], containerEntries[i]
@@ -1271,7 +1256,7 @@ func TestContainerHandler_EnvironmentVariablesCapture(t *testing.T) {
 	handler := NewContainerHandler(nil, nil, []string{"GOMAXPROCS", "IGNORED"})
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "p1"},
+		Namespace: "default", Name: "p1",
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{
 			Name:  "c1",
 			Image: "busybox",
@@ -1302,7 +1287,7 @@ func TestContainerHandler_EnvironmentVariablesDisabled(t *testing.T) {
 	handler := NewContainerHandler(nil, nil, []string{})
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "p1"},
+		Namespace: "default", Name: "p1",
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{
 			Name:  "c1",
 			Image: "busybox",

@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,13 +22,11 @@ import (
 
 func TestResourceQuotaHandler(t *testing.T) {
 	rq1 := &corev1.ResourceQuota{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "compute-quota",
-			Namespace:         "default",
-			Labels:            map[string]string{"env": "prod"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "compute-quota",
+		Namespace:         "default",
+		Labels:            map[string]string{"env": "prod"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.ResourceQuotaSpec{
 			Hard: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("4"),
@@ -50,11 +48,9 @@ func TestResourceQuotaHandler(t *testing.T) {
 	}
 
 	rq2 := &corev1.ResourceQuota{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "storage-quota",
-			Namespace:         "kube-system",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "storage-quota",
+		Namespace:         "kube-system",
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.ResourceQuotaSpec{
 			Hard: corev1.ResourceList{
 				corev1.ResourcePersistentVolumeClaims: resource.MustParse("5"),
@@ -73,11 +69,9 @@ func TestResourceQuotaHandler(t *testing.T) {
 	}
 
 	rqEmpty := &corev1.ResourceQuota{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "empty-quota",
-			Namespace:         "default",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "empty-quota",
+		Namespace:         "default",
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.ResourceQuotaSpec{
 			Hard: corev1.ResourceList{},
 		},
@@ -92,7 +86,7 @@ func TestResourceQuotaHandler(t *testing.T) {
 		namespaces     []string
 		expectedCount  int
 		expectedNames  []string
-		expectedFields map[string]interface{}
+		expectedFields map[string]any
 	}{
 		{
 			name:           "collect all resource quotas",
@@ -114,7 +108,7 @@ func TestResourceQuotaHandler(t *testing.T) {
 			namespaces:     []string{},
 			expectedCount:  1,
 			expectedNames:  []string{"compute-quota"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"scopes": []string{"BestEffort", "NotBestEffort"},
 			},
 		},
@@ -140,11 +134,11 @@ func TestResourceQuotaHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.namespaces)
+			entries, err := handler.Collect(t.Context(), tt.namespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -160,13 +154,7 @@ func TestResourceQuotaHandler(t *testing.T) {
 				entryNames[i] = resourceQuotaData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find resource quota with name %s", expectedName)
 				}
@@ -227,11 +215,11 @@ func TestResourceQuotaHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -250,7 +238,7 @@ func TestResourceQuotaHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -262,18 +250,16 @@ func TestResourceQuotaHandler_InvalidObject(t *testing.T) {
 // createTestResourceQuota creates a test ResourceQuota with various configurations
 func createTestResourceQuota(name, namespace string) *corev1.ResourceQuota {
 	rq := &corev1.ResourceQuota{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test resource quota",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test resource quota",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.ResourceQuotaSpec{
 			Hard: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("2"),
@@ -310,10 +296,10 @@ func TestResourceQuotaHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

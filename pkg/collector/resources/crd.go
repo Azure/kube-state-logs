@@ -92,23 +92,15 @@ func (h *CRDHandler) createLogEntry(obj *unstructured.Unstructured) types.CRDDat
 
 	// Create data structure - only include custom fields
 	data := types.CRDData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     strings.ToLower(obj.GetKind()), // Use lowercase Kind as ResourceType
-					Name:             utils.ExtractName(obj),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(obj),
-				},
-				Namespace: utils.ExtractNamespace(obj),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(obj),
-				Annotations: utils.ExtractAnnotations(obj),
-			},
-		},
-		APIVersion:   obj.GetAPIVersion(),
-		CustomFields: customFields,
+		Timestamp:        time.Now(),
+		ResourceType:     strings.ToLower(obj.GetKind()), // Use lowercase Kind as ResourceType
+		Name:             utils.ExtractName(obj),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(obj),
+		Namespace:        utils.ExtractNamespace(obj),
+		Labels:           utils.ExtractLabels(obj),
+		Annotations:      utils.ExtractAnnotations(obj),
+		APIVersion:       obj.GetAPIVersion(),
+		CustomFields:     customFields,
 	}
 
 	return data

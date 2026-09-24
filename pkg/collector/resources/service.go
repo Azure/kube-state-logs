@@ -145,21 +145,13 @@ func (h *ServiceHandler) createLogEntry(service *corev1.Service) types.ServiceDa
 	}
 
 	data := types.ServiceData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "service",
-					Name:             utils.ExtractName(service),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(service),
-				},
-				Namespace: utils.ExtractNamespace(service),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(service),
-				Annotations: utils.ExtractAnnotations(service),
-			},
-		},
+		Timestamp:                             time.Now(),
+		ResourceType:                          "service",
+		Name:                                  utils.ExtractName(service),
+		CreatedTimestamp:                      utils.ExtractCreationTimestamp(service),
+		Namespace:                             utils.ExtractNamespace(service),
+		Labels:                                utils.ExtractLabels(service),
+		Annotations:                           utils.ExtractAnnotations(service),
 		Type:                                  string(service.Spec.Type),
 		ClusterIP:                             service.Spec.ClusterIP,
 		ExternalIP:                            externalIP,

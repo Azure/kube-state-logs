@@ -98,21 +98,13 @@ func (h *LeaseHandler) createLogEntry(lease *coordinationv1.Lease) types.LeaseDa
 	}
 
 	data := types.LeaseData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "lease",
-					Name:             utils.ExtractName(lease),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(lease),
-				},
-				Namespace: utils.ExtractNamespace(lease),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(lease),
-				Annotations: utils.ExtractAnnotations(lease),
-			},
-		},
+		Timestamp:            time.Now(),
+		ResourceType:         "lease",
+		Name:                 utils.ExtractName(lease),
+		CreatedTimestamp:     utils.ExtractCreationTimestamp(lease),
+		Namespace:            utils.ExtractNamespace(lease),
+		Labels:               utils.ExtractLabels(lease),
+		Annotations:          utils.ExtractAnnotations(lease),
 		HolderIdentity:       holderIdentity,
 		LeaseDurationSeconds: leaseDurationSeconds,
 		RenewTime:            renewTime,

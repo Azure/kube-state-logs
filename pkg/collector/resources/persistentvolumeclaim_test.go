@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -20,17 +19,15 @@ import (
 
 func createTestPVC(name, namespace string, phase corev1.PersistentVolumeClaimPhase) *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app": name,
-			},
-			Annotations: map[string]string{
-				"description": "test pvc",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app": name,
 		},
+		Annotations: map[string]string{
+			"description": "test pvc",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.VolumeResourceRequirements{
@@ -59,10 +56,10 @@ func TestPersistentVolumeClaimHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -91,9 +88,9 @@ func TestPersistentVolumeClaimHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	factory.WaitForCacheSync(context.Background().Done())
-	entries, err := handler.Collect(context.Background(), []string{})
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -112,9 +109,9 @@ func TestPersistentVolumeClaimHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	factory.Start(context.Background().Done())
-	factory.WaitForCacheSync(context.Background().Done())
-	entries, err := handler.Collect(context.Background(), []string{})
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}

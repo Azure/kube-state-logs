@@ -9,7 +9,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes/fake"
@@ -36,7 +35,7 @@ func TestContainerHandlerDoesNotReusePreviousMetrics(t *testing.T) {
 			pod.Spec.NodeName = "node-a"
 			pod.Spec.InitContainers = []corev1.Container{{Name: "setup"}}
 			pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{Name: "setup", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}}
-			metrics := &metricsv1beta1.PodMetrics{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace}}
+			metrics := &metricsv1beta1.PodMetrics{Name: pod.Name, Namespace: pod.Namespace}
 			for _, name := range []string{"app", "setup"} {
 				metrics.Containers = append(metrics.Containers, metricsv1beta1.ContainerMetrics{Name: name, Usage: corev1.ResourceList{
 					corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("32Mi"),
@@ -49,7 +48,7 @@ func TestContainerHandlerDoesNotReusePreviousMetrics(t *testing.T) {
 			}
 			handler := NewContainerHandler(fake.NewSimpleClientset(), metricsClient, nil)
 			handler.SetNodeFilter("node-a")
-			first, err := handler.processPods(context.Background(), []any{pod}, nil)
+			first, err := handler.processPods(t.Context(), []any{pod}, nil)
 			if err != nil || len(first) != 2 {
 				t.Fatalf("first collection: entries=%d, error=%v", len(first), err)
 			}
@@ -69,7 +68,7 @@ func TestContainerHandlerDoesNotReusePreviousMetrics(t *testing.T) {
 				pod = pod.DeepCopy()
 				pod.UID = "replacement-uid"
 			}
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if test.canceled {
 				cancel()
@@ -116,7 +115,7 @@ func TestContainerHandlerMetricsScope(t *testing.T) {
 			otherField := localPod.DeepCopy()
 			otherField.Name = "other-field"
 			podMetrics := &metricsv1beta1.PodMetrics{
-				ObjectMeta: metav1.ObjectMeta{Name: "local", Namespace: "default"},
+				Name: "local", Namespace: "default",
 				Containers: []metricsv1beta1.ContainerMetrics{{Name: "app", Usage: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("100m"),
 					corev1.ResourceMemory: resource.MustParse("128Mi"),
@@ -135,7 +134,7 @@ func TestContainerHandlerMetricsScope(t *testing.T) {
 			if test.emptyPods {
 				pods = nil
 			}
-			entries, err := handler.processPods(context.Background(), pods, []string{"default"})
+			entries, err := handler.processPods(t.Context(), pods, []string{"default"})
 			if err != nil {
 				t.Fatal(err)
 			}

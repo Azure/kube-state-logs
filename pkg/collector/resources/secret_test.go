@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,16 +22,14 @@ import (
 
 func TestSecretHandler(t *testing.T) {
 	secret1 := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-secret",
-			Namespace: "default",
-			Labels:    map[string]string{"env": "prod"},
-			Annotations: map[string]string{
-				"purpose": "test",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      "my-secret",
+		Namespace: "default",
+		Labels:    map[string]string{"env": "prod"},
+		Annotations: map[string]string{
+			"purpose": "test",
 		},
-		Type: corev1.SecretTypeOpaque,
+		CreationTimestamp: metav1.Now(),
+		Type:              corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
 			"password": []byte("supersecret"),
 			"token":    []byte("tokendata"),
@@ -39,13 +37,11 @@ func TestSecretHandler(t *testing.T) {
 	}
 
 	secret2 := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "docker-secret",
-			Namespace:         "kube-system",
-			Labels:            map[string]string{"env": "system"},
-			CreationTimestamp: metav1.Now(),
-		},
-		Type: corev1.SecretTypeDockerConfigJson,
+		Name:              "docker-secret",
+		Namespace:         "kube-system",
+		Labels:            map[string]string{"env": "system"},
+		CreationTimestamp: metav1.Now(),
+		Type:              corev1.SecretTypeDockerConfigJson,
 		Data: map[string][]byte{
 			".dockerconfigjson": []byte("{\"auths\":{}}"),
 		},
@@ -57,7 +53,7 @@ func TestSecretHandler(t *testing.T) {
 		namespaces     []string
 		expectedCount  int
 		expectedNames  []string
-		expectedFields map[string]interface{}
+		expectedFields map[string]any
 	}{
 		{
 			name:          "collect all secrets",
@@ -79,7 +75,7 @@ func TestSecretHandler(t *testing.T) {
 			namespaces:    []string{},
 			expectedCount: 1,
 			expectedNames: []string{"my-secret"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"data_keys": []string{"password", "token"},
 			},
 		},
@@ -98,11 +94,11 @@ func TestSecretHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.namespaces)
+			entries, err := handler.Collect(t.Context(), tt.namespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -118,13 +114,7 @@ func TestSecretHandler(t *testing.T) {
 				entryNames[i] = secretData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find secret with name %s", expectedName)
 				}
@@ -185,11 +175,11 @@ func TestSecretHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -208,7 +198,7 @@ func TestSecretHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -220,19 +210,17 @@ func TestSecretHandler_InvalidObject(t *testing.T) {
 // createTestSecret creates a test secret with various configurations
 func createTestSecret(name, namespace string, secretType corev1.SecretType) *corev1.Secret {
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test secret",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
-		Type: secretType,
+		Annotations: map[string]string{
+			"description": "test secret",
+		},
+		CreationTimestamp: metav1.Now(),
+		Type:              secretType,
 		Data: map[string][]byte{
 			"username": []byte("admin"),
 			"password": []byte("secret123"),
@@ -295,11 +283,11 @@ func TestSecretHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all secrets
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -381,6 +369,53 @@ func TestSecretHandler_createLogEntry(t *testing.T) {
 	}
 }
 
+func TestSecretHandler_createLogEntry_DataKeys(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		secret   corev1.Secret
+		wantKeys []string
+	}{
+		{name: "nil maps"},
+		{
+			name: "empty maps",
+			secret: corev1.Secret{
+				Data:       map[string][]byte{},
+				StringData: map[string]string{},
+			},
+		},
+		{
+			name: "data only",
+			secret: corev1.Secret{
+				Data: map[string][]byte{"zulu": nil, "alpha": nil},
+			},
+			wantKeys: []string{"alpha", "zulu"},
+		},
+		{
+			name: "string data only",
+			secret: corev1.Secret{
+				StringData: map[string]string{"zulu": "", "alpha": ""},
+			},
+			wantKeys: []string{"alpha", "zulu"},
+		},
+		{
+			name: "overlapping keys remain duplicated and sorted",
+			secret: corev1.Secret{
+				Data:       map[string][]byte{"zulu": nil, "shared": nil},
+				StringData: map[string]string{"alpha": "", "shared": ""},
+			},
+			wantKeys: []string{"alpha", "shared", "shared", "zulu"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := NewSecretHandler(fake.NewSimpleClientset())
+			entry := handler.createLogEntry(&tt.secret)
+			if !slices.Equal(entry.DataKeys, tt.wantKeys) || (entry.DataKeys == nil) != (tt.wantKeys == nil) {
+				t.Errorf("DataKeys = %#v, want %#v", entry.DataKeys, tt.wantKeys)
+			}
+		})
+	}
+}
+
 func TestSecretHandler_createLogEntry_TLS(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	handler := NewSecretHandler(client)
@@ -408,10 +443,10 @@ func TestSecretHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test multiple namespace filtering
 	entries, err := handler.Collect(ctx, []string{"default", "monitoring"})

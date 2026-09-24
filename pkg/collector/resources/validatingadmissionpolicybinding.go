@@ -83,18 +83,12 @@ func (h *ValidatingAdmissionPolicyBindingHandler) createLogEntry(binding *admiss
 	observedGeneration := int64(0)
 
 	data := types.ValidatingAdmissionPolicyBindingData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "validatingadmissionpolicybinding",
-				Name:             utils.ExtractName(binding),
-				CreatedTimestamp: createdTimestamp,
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      binding.GetLabels(),
-				Annotations: binding.GetAnnotations(),
-			},
-		},
+		Timestamp:          time.Now(),
+		ResourceType:       "validatingadmissionpolicybinding",
+		Name:               utils.ExtractName(binding),
+		CreatedTimestamp:   createdTimestamp,
+		Labels:             binding.GetLabels(),
+		Annotations:        binding.GetAnnotations(),
 		PolicyName:         policyName,
 		ParamRef:           paramRef,
 		MatchResources:     []string{},

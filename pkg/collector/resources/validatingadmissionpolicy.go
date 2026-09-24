@@ -82,18 +82,12 @@ func (h *ValidatingAdmissionPolicyHandler) createLogEntry(policy *admissionregis
 	}
 
 	data := types.ValidatingAdmissionPolicyData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "validatingadmissionpolicy",
-				Name:             utils.ExtractName(policy),
-				CreatedTimestamp: createdTimestamp,
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      policy.GetLabels(),
-				Annotations: policy.GetAnnotations(),
-			},
-		},
+		Timestamp:          time.Now(),
+		ResourceType:       "validatingadmissionpolicy",
+		Name:               utils.ExtractName(policy),
+		CreatedTimestamp:   createdTimestamp,
+		Labels:             policy.GetLabels(),
+		Annotations:        policy.GetAnnotations(),
 		FailurePolicy:      failurePolicy,
 		MatchConstraints:   []string{},
 		Validations:        []string{},

@@ -4,7 +4,6 @@
 package kubelet
 
 import (
-	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc, token string) (*Client, string) {
@@ -64,7 +62,7 @@ func TestClientGetsPodsAndStats(t *testing.T) {
 		switch r.URL.Path {
 		case "/pods":
 			_ = json.NewEncoder(w).Encode(PodList{Items: []corev1.Pod{{
-				ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default"},
+				Name: "pod-a", Namespace: "default",
 			}}})
 		case "/stats/summary":
 			_ = json.NewEncoder(w).Encode(StatsSummary{Pods: []PodStats{{
@@ -80,7 +78,7 @@ func TestClientGetsPodsAndStats(t *testing.T) {
 		}
 	}, " test-token\n")
 
-	pods, err := client.GetPods(context.Background())
+	pods, err := client.GetPods(t.Context())
 	if err != nil {
 		t.Fatalf("GetPods() error: %v", err)
 	}
@@ -88,7 +86,7 @@ func TestClientGetsPodsAndStats(t *testing.T) {
 		t.Fatalf("GetPods() = %#v", pods)
 	}
 
-	stats, err := client.GetStatsSummary(context.Background())
+	stats, err := client.GetStatsSummary(t.Context())
 	if err != nil {
 		t.Fatalf("GetStatsSummary() error: %v", err)
 	}
@@ -107,13 +105,13 @@ func TestClientReadsRotatedTokenForEveryRequest(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(PodList{})
 	}, "first")
 
-	if _, err := client.GetPods(context.Background()); err != nil {
+	if _, err := client.GetPods(t.Context()); err != nil {
 		t.Fatalf("first GetPods() error: %v", err)
 	}
 	if err := os.WriteFile(tokenPath, []byte("second\n"), 0o600); err != nil {
 		t.Fatalf("rotate token: %v", err)
 	}
-	if _, err := client.GetPods(context.Background()); err != nil {
+	if _, err := client.GetPods(t.Context()); err != nil {
 		t.Fatalf("second GetPods() error: %v", err)
 	}
 
@@ -173,7 +171,7 @@ func TestClientReturnsStatusError(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 	}, "token")
-	if _, err := client.GetPods(context.Background()); err == nil {
+	if _, err := client.GetPods(t.Context()); err == nil {
 		t.Fatal("GetPods() succeeded for a forbidden response")
 	}
 }

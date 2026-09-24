@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -22,19 +21,17 @@ import (
 // createTestJob creates a test job with various configurations
 func createTestJob(name, namespace string, completions int32, parallelism int32) *batchv1.Job {
 	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test job",
-			},
-			CreationTimestamp: metav1.Now(),
-			Generation:        1,
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description": "test job",
+		},
+		CreationTimestamp: metav1.Now(),
+		Generation:        1,
 		Spec: batchv1.JobSpec{
 			Completions: &completions,
 			Parallelism: &parallelism,
@@ -130,11 +127,11 @@ func TestJobHandler_Collect(t *testing.T) {
 	}
 
 	// Start the factory to populate the cache
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
 	// Test collecting all jobs
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -308,9 +305,9 @@ func TestJobHandler_Collect_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
-	ctx := context.Background()
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -336,10 +333,10 @@ func TestJobHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test multiple namespace filtering
 	entries, err := handler.Collect(ctx, []string{"default", "monitoring"})

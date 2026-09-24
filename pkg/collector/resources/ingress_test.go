@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,42 +25,38 @@ func TestIngressHandler(t *testing.T) {
 	ingressClassName := "nginx"
 
 	ingress1 := &networkingv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "web-ingress",
-			Namespace:         "default",
-			Labels:            map[string]string{"app": "web"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "web-ingress",
+		Namespace:         "default",
+		Labels:            map[string]string{"app": "web"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.IngressSpec{
 			IngressClassName: &ingressClassName,
 			Rules: []networkingv1.IngressRule{
 				{
 					Host: "example.com",
-					IngressRuleValue: networkingv1.IngressRuleValue{
-						HTTP: &networkingv1.HTTPIngressRuleValue{
-							Paths: []networkingv1.HTTPIngressPath{
-								{
-									Path:     "/",
-									PathType: &pathTypePrefix,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: "web-service",
-											Port: networkingv1.ServiceBackendPort{
-												Number: 80,
-											},
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: []networkingv1.HTTPIngressPath{
+							{
+								Path:     "/",
+								PathType: &pathTypePrefix,
+								Backend: networkingv1.IngressBackend{
+									Service: &networkingv1.IngressServiceBackend{
+										Name: "web-service",
+										Port: networkingv1.ServiceBackendPort{
+											Number: 80,
 										},
 									},
 								},
-								{
-									Path:     "/api",
-									PathType: &pathTypeExact,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: "api-service",
-											Port: networkingv1.ServiceBackendPort{
-												Number: 8080,
-											},
+							},
+							{
+								Path:     "/api",
+								PathType: &pathTypeExact,
+								Backend: networkingv1.IngressBackend{
+									Service: &networkingv1.IngressServiceBackend{
+										Name: "api-service",
+										Port: networkingv1.ServiceBackendPort{
+											Number: 8080,
 										},
 									},
 								},
@@ -89,27 +85,23 @@ func TestIngressHandler(t *testing.T) {
 	}
 
 	ingress2 := &networkingv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "api-ingress",
-			Namespace:         "kube-system",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "api-ingress",
+		Namespace:         "kube-system",
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.IngressSpec{
 			Rules: []networkingv1.IngressRule{
 				{
 					Host: "api.example.com",
-					IngressRuleValue: networkingv1.IngressRuleValue{
-						HTTP: &networkingv1.HTTPIngressRuleValue{
-							Paths: []networkingv1.HTTPIngressPath{
-								{
-									Path:     "/",
-									PathType: &pathTypePrefix,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: "api-service",
-											Port: networkingv1.ServiceBackendPort{
-												Number: 8080,
-											},
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: []networkingv1.HTTPIngressPath{
+							{
+								Path:     "/",
+								PathType: &pathTypePrefix,
+								Backend: networkingv1.IngressBackend{
+									Service: &networkingv1.IngressServiceBackend{
+										Name: "api-service",
+										Port: networkingv1.ServiceBackendPort{
+											Number: 8080,
 										},
 									},
 								},
@@ -122,27 +114,23 @@ func TestIngressHandler(t *testing.T) {
 	}
 
 	ingressNoLoadBalancer := &networkingv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "no-lb-ingress",
-			Namespace:         "default",
-			CreationTimestamp: metav1.Now(),
-		},
+		Name:              "no-lb-ingress",
+		Namespace:         "default",
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.IngressSpec{
 			Rules: []networkingv1.IngressRule{
 				{
 					Host: "nolb.example.com",
-					IngressRuleValue: networkingv1.IngressRuleValue{
-						HTTP: &networkingv1.HTTPIngressRuleValue{
-							Paths: []networkingv1.HTTPIngressPath{
-								{
-									Path:     "/",
-									PathType: &pathTypePrefix,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: "nolb-service",
-											Port: networkingv1.ServiceBackendPort{
-												Number: 80,
-											},
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: []networkingv1.HTTPIngressPath{
+							{
+								Path:     "/",
+								PathType: &pathTypePrefix,
+								Backend: networkingv1.IngressBackend{
+									Service: &networkingv1.IngressServiceBackend{
+										Name: "nolb-service",
+										Port: networkingv1.ServiceBackendPort{
+											Number: 80,
 										},
 									},
 								},
@@ -160,7 +148,7 @@ func TestIngressHandler(t *testing.T) {
 		namespaces     []string
 		expectedCount  int
 		expectedNames  []string
-		expectedFields map[string]interface{}
+		expectedFields map[string]any
 	}{
 		{
 			name:          "collect all ingresses",
@@ -182,7 +170,7 @@ func TestIngressHandler(t *testing.T) {
 			namespaces:    []string{},
 			expectedCount: 1,
 			expectedNames: []string{"web-ingress"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"condition_load_balancer_ready": true,
 			},
 		},
@@ -192,7 +180,7 @@ func TestIngressHandler(t *testing.T) {
 			namespaces:    []string{},
 			expectedCount: 1,
 			expectedNames: []string{"no-lb-ingress"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"condition_load_balancer_ready": false,
 			},
 		},
@@ -211,11 +199,11 @@ func TestIngressHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), tt.namespaces)
+			entries, err := handler.Collect(t.Context(), tt.namespaces)
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -231,13 +219,7 @@ func TestIngressHandler(t *testing.T) {
 				entryNames[i] = ingressData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find ingress with name %s", expectedName)
 				}
@@ -300,11 +282,11 @@ func TestIngressHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -323,7 +305,7 @@ func TestIngressHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &networkingv1.NetworkPolicy{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -337,36 +319,32 @@ func createTestIngress(name, namespace string) *networkingv1.Ingress {
 	pathTypePrefix := networkingv1.PathTypePrefix
 	ingressClassName := "nginx"
 	ingress := &networkingv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description":                 "test ingress",
-				"kubernetes.io/ingress.class": "nginx",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
+		Annotations: map[string]string{
+			"description":                 "test ingress",
+			"kubernetes.io/ingress.class": "nginx",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: networkingv1.IngressSpec{
 			IngressClassName: &ingressClassName,
 			Rules: []networkingv1.IngressRule{
 				{
 					Host: "example.com",
-					IngressRuleValue: networkingv1.IngressRuleValue{
-						HTTP: &networkingv1.HTTPIngressRuleValue{
-							Paths: []networkingv1.HTTPIngressPath{
-								{
-									Path:     "/",
-									PathType: &pathTypePrefix,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: "test-service",
-											Port: networkingv1.ServiceBackendPort{
-												Number: 80,
-											},
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: []networkingv1.HTTPIngressPath{
+							{
+								Path:     "/",
+								PathType: &pathTypePrefix,
+								Backend: networkingv1.IngressBackend{
+									Service: &networkingv1.IngressServiceBackend{
+										Name: "test-service",
+										Port: networkingv1.ServiceBackendPort{
+											Number: 80,
 										},
 									},
 								},
@@ -462,10 +440,10 @@ func TestIngressHandler_Collect_NamespaceFiltering(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test multiple namespace filtering
 	entries, err := handler.Collect(ctx, []string{"default", "monitoring"})
@@ -540,10 +518,10 @@ func TestIngressHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

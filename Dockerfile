@@ -2,11 +2,11 @@
 FROM mcr.microsoft.com/azurelinux/base/core:3.0 AS source
 
 ARG TARGETARCH
-ARG GO_VERSION=1.26.8
+ARG GO_VERSION=1.27.1
 
 # SHA256 Checksums can be found on the releases pages at https://github.com/microsoft/go/blob/microsoft/main/eng/doc/Downloads.md
-ARG GO_SHA256SUM_AMD64=2aeca690395bd5c8a6f00ac6eeed4350d204daa3952b9d7f3335c954dc6231b4
-ARG GO_SHA256SUM_ARM64=04d749b59f3c445ed51456cec95cfc0b7e42dbcfdd3f9f7b9e2e9ae0c34e6bec
+ARG GO_SHA256SUM_AMD64=fcaec387bae73ff6241a92b2ef45e2f86fe22583c4183f9008b236b168c3a464
+ARG GO_SHA256SUM_ARM64=5ec3b63260359f3b636c6892c87bafed494ad7f431b762c6ede109c7029dddcc
 
 ENV GOROOT=/usr/local/go
 ENV GOBIN=/usr/local/go/bin
@@ -22,8 +22,6 @@ RUN GO_ARCHIVE="go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" && \
         && tar -C /usr/local -zxf "${GO_ARCHIVE}" \
         && rm "${GO_ARCHIVE}" \
         && go version
-
-ENV GOEXPERIMENT=ms_nocgo_opensslcrypto
 
 WORKDIR /src
 

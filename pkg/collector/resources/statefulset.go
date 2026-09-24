@@ -102,21 +102,13 @@ func (h *StatefulSetHandler) createLogEntry(sts *appsv1.StatefulSet) types.State
 	}
 
 	data := types.StatefulSetData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "statefulset",
-					Name:             utils.ExtractName(sts),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(sts),
-				},
-				Namespace: utils.ExtractNamespace(sts),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(sts),
-				Annotations: utils.ExtractAnnotations(sts),
-			},
-		},
+		Timestamp:               time.Now(),
+		ResourceType:            "statefulset",
+		Name:                    utils.ExtractName(sts),
+		CreatedTimestamp:        utils.ExtractCreationTimestamp(sts),
+		Namespace:               utils.ExtractNamespace(sts),
+		Labels:                  utils.ExtractLabels(sts),
+		Annotations:             utils.ExtractAnnotations(sts),
 		DesiredReplicas:         desiredReplicas,
 		CurrentReplicas:         sts.Status.Replicas,
 		ReadyReplicas:           sts.Status.ReadyReplicas,

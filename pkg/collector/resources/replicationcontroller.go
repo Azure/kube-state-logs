@@ -78,21 +78,13 @@ func (h *ReplicationControllerHandler) createLogEntry(rc *corev1.ReplicationCont
 
 	// Create data structure
 	data := types.ReplicationControllerData{
-		NamespacedLabeledMetadata: types.NamespacedLabeledMetadata{
-			NamespacedMetadata: types.NamespacedMetadata{
-				BaseMetadata: types.BaseMetadata{
-					Timestamp:        time.Now(),
-					ResourceType:     "replicationcontroller",
-					Name:             utils.ExtractName(rc),
-					CreatedTimestamp: utils.ExtractCreationTimestamp(rc),
-				},
-				Namespace: utils.ExtractNamespace(rc),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(rc),
-				Annotations: utils.ExtractAnnotations(rc),
-			},
-		},
+		Timestamp:            time.Now(),
+		ResourceType:         "replicationcontroller",
+		Name:                 utils.ExtractName(rc),
+		CreatedTimestamp:     utils.ExtractCreationTimestamp(rc),
+		Namespace:            utils.ExtractNamespace(rc),
+		Labels:               utils.ExtractLabels(rc),
+		Annotations:          utils.ExtractAnnotations(rc),
 		DesiredReplicas:      desiredReplicas,
 		CurrentReplicas:      rc.Status.Replicas,
 		ReadyReplicas:        rc.Status.ReadyReplicas,

@@ -4,7 +4,7 @@
 package resources
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -24,36 +24,30 @@ func TestPriorityClassHandler(t *testing.T) {
 	preemptionPolicy := corev1.PreemptionPolicy("PreemptLowerOrEqualPriority")
 
 	pc1 := &schedulingv1.PriorityClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "high-priority",
-			Labels:            map[string]string{"tier": "critical"},
-			Annotations:       map[string]string{"purpose": "test"},
-			CreationTimestamp: metav1.Now(),
-		},
-		Value:            1000000,
-		GlobalDefault:    false,
-		Description:      "High priority class for critical workloads",
-		PreemptionPolicy: &preemptionPolicy,
+		Name:              "high-priority",
+		Labels:            map[string]string{"tier": "critical"},
+		Annotations:       map[string]string{"purpose": "test"},
+		CreationTimestamp: metav1.Now(),
+		Value:             1000000,
+		GlobalDefault:     false,
+		Description:       "High priority class for critical workloads",
+		PreemptionPolicy:  &preemptionPolicy,
 	}
 
 	pc2 := &schedulingv1.PriorityClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "system-cluster-critical",
-			CreationTimestamp: metav1.Now(),
-		},
-		Value:         2000000000,
-		GlobalDefault: true,
-		Description:   "System cluster critical priority class",
+		Name:              "system-cluster-critical",
+		CreationTimestamp: metav1.Now(),
+		Value:             2000000000,
+		GlobalDefault:     true,
+		Description:       "System cluster critical priority class",
 	}
 
 	pcNilPreemption := &schedulingv1.PriorityClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "nil-preemption",
-			CreationTimestamp: metav1.Now(),
-		},
-		Value:         100000,
-		GlobalDefault: false,
-		Description:   "Priority class with nil preemption policy",
+		Name:              "nil-preemption",
+		CreationTimestamp: metav1.Now(),
+		Value:             100000,
+		GlobalDefault:     false,
+		Description:       "Priority class with nil preemption policy",
 	}
 
 	tests := []struct {
@@ -61,7 +55,7 @@ func TestPriorityClassHandler(t *testing.T) {
 		priorityClasses []*schedulingv1.PriorityClass
 		expectedCount   int
 		expectedNames   []string
-		expectedFields  map[string]interface{}
+		expectedFields  map[string]any
 	}{
 		{
 			name:            "collect all priority classes",
@@ -74,7 +68,7 @@ func TestPriorityClassHandler(t *testing.T) {
 			priorityClasses: []*schedulingv1.PriorityClass{pc1},
 			expectedCount:   1,
 			expectedNames:   []string{"high-priority"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"preemption_policy": "PreemptLowerOrEqualPriority",
 			},
 		},
@@ -83,7 +77,7 @@ func TestPriorityClassHandler(t *testing.T) {
 			priorityClasses: []*schedulingv1.PriorityClass{pcNilPreemption},
 			expectedCount:   1,
 			expectedNames:   []string{"nil-preemption"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"preemption_policy": "",
 			},
 		},
@@ -92,7 +86,7 @@ func TestPriorityClassHandler(t *testing.T) {
 			priorityClasses: []*schedulingv1.PriorityClass{pc2},
 			expectedCount:   1,
 			expectedNames:   []string{"system-cluster-critical"},
-			expectedFields: map[string]interface{}{
+			expectedFields: map[string]any{
 				"global_default": true,
 			},
 		},
@@ -111,11 +105,11 @@ func TestPriorityClassHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
 			}
-			factory.Start(context.Background().Done())
-			if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 				t.Fatal("Failed to sync cache")
 			}
-			entries, err := handler.Collect(context.Background(), []string{})
+			entries, err := handler.Collect(t.Context(), []string{})
 			if err != nil {
 				t.Fatalf("Failed to collect metrics: %v", err)
 			}
@@ -131,13 +125,7 @@ func TestPriorityClassHandler(t *testing.T) {
 				entryNames[i] = priorityClassData.Name
 			}
 			for _, expectedName := range tt.expectedNames {
-				found := false
-				for _, name := range entryNames {
-					if name == expectedName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(entryNames, expectedName)
 				if !found {
 					t.Errorf("Expected to find priority class with name %s", expectedName)
 				}
@@ -193,11 +181,11 @@ func TestPriorityClassHandler_EmptyCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
-	factory.Start(context.Background().Done())
-	if !cache.WaitForCacheSync(context.Background().Done(), handler.GetInformer().HasSynced) {
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.GetInformer().HasSynced) {
 		t.Fatal("Failed to sync cache")
 	}
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -216,7 +204,7 @@ func TestPriorityClassHandler_InvalidObject(t *testing.T) {
 	}
 	invalidObj := &corev1.Pod{}
 	handler.GetInformer().GetStore().Add(invalidObj)
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Failed to collect metrics: %v", err)
 	}
@@ -228,20 +216,18 @@ func TestPriorityClassHandler_InvalidObject(t *testing.T) {
 // createTestPriorityClass creates a test PriorityClass with various configurations
 func createTestPriorityClass(name string) *schedulingv1.PriorityClass {
 	pc := &schedulingv1.PriorityClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"app":     name,
-				"version": "v1",
-			},
-			Annotations: map[string]string{
-				"description": "test priority class",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name: name,
+		Labels: map[string]string{
+			"app":     name,
+			"version": "v1",
 		},
-		Value:         100000,
-		GlobalDefault: false,
-		Description:   "Test priority class",
+		Annotations: map[string]string{
+			"description": "test priority class",
+		},
+		CreationTimestamp: metav1.Now(),
+		Value:             100000,
+		GlobalDefault:     false,
+		Description:       "Test priority class",
 	}
 
 	return pc
@@ -261,10 +247,10 @@ func TestPriorityClassHandler_Collect(t *testing.T) {
 		t.Fatalf("Failed to setup informer: %v", err)
 	}
 
-	factory.Start(nil)
-	factory.WaitForCacheSync(nil)
+	factory.Start(t.Context().Done())
+	factory.WaitForCacheSync(t.Context().Done())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	entries, err := handler.Collect(ctx, []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

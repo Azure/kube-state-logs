@@ -13,11 +13,9 @@ import (
 func ConvertConditionStatus(status metav1.ConditionStatus) *bool {
 	switch status {
 	case metav1.ConditionTrue:
-		val := true
-		return &val
+		return new(true)
 	case metav1.ConditionFalse:
-		val := false
-		return &val
+		return new(false)
 	case metav1.ConditionUnknown:
 		return nil
 	default:
@@ -30,11 +28,9 @@ func ConvertConditionStatus(status metav1.ConditionStatus) *bool {
 func ConvertCoreConditionStatus(status corev1.ConditionStatus) *bool {
 	switch status {
 	case corev1.ConditionTrue:
-		val := true
-		return &val
+		return new(true)
 	case corev1.ConditionFalse:
-		val := false
-		return &val
+		return new(false)
 	case corev1.ConditionUnknown:
 		return nil
 	default:

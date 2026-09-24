@@ -12,7 +12,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type fakeKubeletClient struct {
@@ -40,16 +39,16 @@ func (f *fakeKubeletClient) GetStatsSummary(context.Context) (*StatsSummary, err
 
 func TestCachedSnapshotSourceCoalescesRequests(t *testing.T) {
 	client := &fakeKubeletClient{
-		pods:  []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "pod-a"}}},
+		pods:  []corev1.Pod{{Name: "pod-a"}},
 		stats: &StatsSummary{},
 	}
 	source := NewCachedSnapshotSource(client, time.Minute)
 
-	first, err := source.GetSnapshot(context.Background(), true)
+	first, err := source.GetSnapshot(t.Context(), true)
 	if err != nil {
 		t.Fatalf("first GetSnapshot() error: %v", err)
 	}
-	second, err := source.GetSnapshot(context.Background(), true)
+	second, err := source.GetSnapshot(t.Context(), true)
 	if err != nil {
 		t.Fatalf("second GetSnapshot() error: %v", err)
 	}
@@ -65,25 +64,25 @@ func TestCachedSnapshotSourceRefreshesStatsWithPods(t *testing.T) {
 	for _, podOnlyRefresh := range []bool{false, true} {
 		t.Run(fmt.Sprintf("podOnlyRefresh=%t", podOnlyRefresh), func(t *testing.T) {
 			client := &fakeKubeletClient{
-				pods:  []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "old-pod"}}},
+				pods:  []corev1.Pod{{Name: "old-pod"}},
 				stats: &StatsSummary{},
 			}
 			source := NewCachedSnapshotSource(client, time.Hour)
-			if _, err := source.GetSnapshot(context.Background(), true); err != nil {
+			if _, err := source.GetSnapshot(t.Context(), true); err != nil {
 				t.Fatal(err)
 			}
 			source.podsFetchedAt = time.Now().Add(-2 * time.Hour)
-			client.pods = []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "new-pod"}}}
+			client.pods = []corev1.Pod{{Name: "new-pod"}}
 			client.stats = &StatsSummary{Pods: []PodStats{{PodRef: PodReference{Name: "new-pod"}}}}
 			if podOnlyRefresh {
-				if _, err := source.GetSnapshot(context.Background(), false); err != nil {
+				if _, err := source.GetSnapshot(t.Context(), false); err != nil {
 					t.Fatal(err)
 				}
 				if client.statsCalls != 1 {
 					t.Fatalf("pod-only refresh fetched stats: %d calls", client.statsCalls)
 				}
 			}
-			snapshot, err := source.GetSnapshot(context.Background(), true)
+			snapshot, err := source.GetSnapshot(t.Context(), true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -98,10 +97,10 @@ func TestCachedSnapshotSourceRefreshesStatsWithPods(t *testing.T) {
 }
 func TestCachedSnapshotSourceKeepsPodsWhenStatsFail(t *testing.T) {
 	client := &fakeKubeletClient{
-		pods:     []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "pod-a"}}},
+		pods:     []corev1.Pod{{Name: "pod-a"}},
 		statsErr: errors.New("stats unavailable"),
 	}
-	snapshot, err := NewCachedSnapshotSource(client, 0).GetSnapshot(context.Background(), true)
+	snapshot, err := NewCachedSnapshotSource(client, 0).GetSnapshot(t.Context(), true)
 	if err != nil {
 		t.Fatalf("GetSnapshot() error: %v", err)
 	}
@@ -112,7 +111,7 @@ func TestCachedSnapshotSourceKeepsPodsWhenStatsFail(t *testing.T) {
 
 func TestCachedSnapshotSourceSkipsStatsWhenContainersDisabled(t *testing.T) {
 	client := &fakeKubeletClient{pods: []corev1.Pod{{}}}
-	if _, err := NewCachedSnapshotSource(client, 0).GetSnapshot(context.Background(), false); err != nil {
+	if _, err := NewCachedSnapshotSource(client, 0).GetSnapshot(t.Context(), false); err != nil {
 		t.Fatalf("GetSnapshot() error: %v", err)
 	}
 	if client.statsCalls != 0 {
@@ -123,10 +122,10 @@ func TestCachedSnapshotSourceSkipsStatsWhenContainersDisabled(t *testing.T) {
 func TestCachedSnapshotSourceCachesEmptyPodList(t *testing.T) {
 	client := &fakeKubeletClient{}
 	source := NewCachedSnapshotSource(client, time.Minute)
-	if _, err := source.GetSnapshot(context.Background(), false); err != nil {
+	if _, err := source.GetSnapshot(t.Context(), false); err != nil {
 		t.Fatalf("first GetSnapshot() error: %v", err)
 	}
-	if _, err := source.GetSnapshot(context.Background(), true); err != nil {
+	if _, err := source.GetSnapshot(t.Context(), true); err != nil {
 		t.Fatalf("second GetSnapshot() error: %v", err)
 	}
 	if client.podCalls != 1 {

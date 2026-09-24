@@ -4,7 +4,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -20,16 +19,14 @@ import (
 
 func createTestValidatingAdmissionPolicyBinding(name string) *admissionregistrationv1.ValidatingAdmissionPolicyBinding {
 	return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"app": "test-app",
-			},
-			Annotations: map[string]string{
-				"test-annotation": "test-value",
-			},
-			CreationTimestamp: metav1.Now(),
+		Name: name,
+		Labels: map[string]string{
+			"app": "test-app",
 		},
+		Annotations: map[string]string{
+			"test-annotation": "test-value",
+		},
+		CreationTimestamp: metav1.Now(),
 		Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{
 			PolicyName: "test-policy",
 			ParamRef: &admissionregistrationv1.ParamRef{
@@ -120,7 +117,7 @@ func TestValidatingAdmissionPolicyBindingHandler_Collect(t *testing.T) {
 	store.Add(vapb)
 
 	// Collect entries
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -172,7 +169,7 @@ func TestValidatingAdmissionPolicyBindingHandler_Collect_Empty(t *testing.T) {
 	handler.SetupBaseInformer(informer, logger)
 
 	// Collect entries
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -201,7 +198,7 @@ func TestValidatingAdmissionPolicyBindingHandler_Collect_InvalidObject(t *testin
 	store.Add(&corev1.Pod{})
 
 	// Collect entries
-	entries, err := handler.Collect(context.Background(), []string{})
+	entries, err := handler.Collect(t.Context(), []string{})
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

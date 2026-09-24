@@ -73,20 +73,14 @@ func (h *IngressClassHandler) createLogEntry(ic *networkingv1.IngressClass) type
 	}
 
 	data := types.IngressClassData{
-		ClusterScopedMetadata: types.ClusterScopedMetadata{
-			BaseMetadata: types.BaseMetadata{
-				Timestamp:        time.Now(),
-				ResourceType:     "ingressclass",
-				Name:             utils.ExtractName(ic),
-				CreatedTimestamp: utils.ExtractCreationTimestamp(ic),
-			},
-			LabeledMetadata: types.LabeledMetadata{
-				Labels:      utils.ExtractLabels(ic),
-				Annotations: annotations,
-			},
-		},
-		Controller: ic.Spec.Controller,
-		IsDefault:  isDefault,
+		Timestamp:        time.Now(),
+		ResourceType:     "ingressclass",
+		Name:             utils.ExtractName(ic),
+		CreatedTimestamp: utils.ExtractCreationTimestamp(ic),
+		Labels:           utils.ExtractLabels(ic),
+		Annotations:      annotations,
+		Controller:       ic.Spec.Controller,
+		IsDefault:        isDefault,
 	}
 
 	return data
