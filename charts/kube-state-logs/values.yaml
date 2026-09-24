@@ -69,12 +69,16 @@ deployment:
   # Override the OS selector only with an image supporting that operating system.
   nodeSelector:
     kubernetes.io/os: linux
+  tolerations: []
 
 # DaemonSet settings (advanced mode only)
 daemonset:
   # Override the OS selector only with an image supporting that operating system.
   nodeSelector:
     kubernetes.io/os: linux
+  # Tolerate all taints by default to collect from every selected node.
+  tolerations:
+    - operator: Exists
   # Smaller limits since each pod only tracks pods on its local node.
   resources:
     limits:
@@ -92,8 +96,6 @@ daemonset:
   # Set to true only for legacy clusters whose kubelet certificates cannot be
   # verified, and only when node traffic remains on a trusted cluster network.
   kubeletInsecureSkipVerify: false
-
-tolerations: []
 
 # Used to inject additional resources into the helm release if needed.
 # Example:
