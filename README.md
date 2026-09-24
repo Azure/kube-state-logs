@@ -83,8 +83,26 @@ clusters, or clusters where that feature is disabled, set
 be verified, and only on trusted cluster networks.
 
 Both chart workloads select Linux nodes by default because the published image
-supports Linux only. Override `nodeSelector.kubernetes.io/os` when using a
-custom image that supports another operating system.
+supports Linux only. Override the workload's `nodeSelector.kubernetes.io/os`
+when using a custom image that supports another operating system.
+
+Use `deployment.nodeSelector` and `daemonset.nodeSelector` for separate placement:
+
+```yaml
+deploymentMode: advanced
+deployment:
+  nodeSelector:
+    kubernetes.io/os: linux
+    agentpool: system
+daemonset:
+  nodeSelector:
+    kubernetes.io/os: linux
+    agentpool: workers
+```
+
+The selectors are independent, and each defaults to `kubernetes.io/os: linux`.
+`deployment.nodeSelector` applies in both simple and advanced modes;
+`daemonset.nodeSelector` applies only to the advanced-mode DaemonSet.
 
 Kubelet responses are limited to 10 MiB each to reduce buffering and decoding
 memory pressure on node collectors. Larger responses are rejected; use
@@ -93,7 +111,7 @@ not a total memory bound: decoded objects and cached snapshots also consume
 memory, so size the DaemonSet memory limit for the workload.
 
 In advanced mode, scheduled pod and container snapshots are collected only on
-nodes where the DaemonSet runs. A custom `nodeSelector` intentionally limits
+nodes where the DaemonSet runs. A custom `daemonset.nodeSelector` intentionally limits
 that coverage; when pod collection is enabled, the cluster Deployment continues
 to collect unscheduled pods.
 

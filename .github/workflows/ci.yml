@@ -156,11 +156,14 @@ jobs:
 
           helm template linux-only "$chart" \
             --set deploymentMode=advanced \
-            --set-string 'nodeSelector.kubernetes\.io/os=windows' \
-            --set-string 'nodeSelector.agentpool=test' \
+            --set-string 'deployment.nodeSelector.kubernetes\.io/os=windows' \
+            --set-string 'deployment.nodeSelector.agentpool=system' \
+            --set-string 'daemonset.nodeSelector.kubernetes\.io/os=windows' \
+            --set-string 'daemonset.nodeSelector.agentpool=workers' \
             > /tmp/kube-state-logs-linux-only.yaml
           [[ $(grep -c '^        kubernetes.io/os: windows$' /tmp/kube-state-logs-linux-only.yaml) -eq 2 ]]
-          [[ $(grep -c '^        agentpool: test$' /tmp/kube-state-logs-linux-only.yaml) -eq 2 ]]
+          [[ $(grep -c '^        agentpool: system$' /tmp/kube-state-logs-linux-only.yaml) -eq 1 ]]
+          [[ $(grep -c '^        agentpool: workers$' /tmp/kube-state-logs-linux-only.yaml) -eq 1 ]]
           if grep -q 'kubernetes.io/os: linux' /tmp/kube-state-logs-linux-only.yaml; then
             echo "The default Linux node selector was not overridden" >&2
             exit 1

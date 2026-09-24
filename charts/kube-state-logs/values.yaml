@@ -64,9 +64,18 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-# Resource limits for DaemonSet pods (advanced mode only)
-# These can be smaller since each pod only tracks pods on its local node
+# Deployment settings (simple and advanced modes)
+deployment:
+  # Override the OS selector only with an image supporting that operating system.
+  nodeSelector:
+    kubernetes.io/os: linux
+
+# DaemonSet settings (advanced mode only)
 daemonset:
+  # Override the OS selector only with an image supporting that operating system.
+  nodeSelector:
+    kubernetes.io/os: linux
+  # Smaller limits since each pod only tracks pods on its local node.
   resources:
     limits:
       cpu: 200m
@@ -83,11 +92,6 @@ daemonset:
   # Set to true only for legacy clusters whose kubelet certificates cannot be
   # verified, and only when node traffic remains on a trusted cluster network.
   kubeletInsecureSkipVerify: false
-
-# Node selection and scheduling. Override the OS selector when using a custom
-# image that supports another operating system.
-nodeSelector:
-  kubernetes.io/os: linux
 
 tolerations: []
 

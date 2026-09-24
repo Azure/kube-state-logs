@@ -197,8 +197,10 @@ informers and metrics-server instead. Kubelet mode requires the
 `KubeletFineGrainedAuthz` feature, which is enabled by default in Kubernetes 1.33
 and later, for least-privilege access to `/pods`; use informer mode on older
 clusters or when that feature is disabled. Scheduled pod and container coverage
-is limited to nodes where the DaemonSet runs, so a custom `nodeSelector`
-intentionally narrows collection coverage.
+is limited to nodes where the DaemonSet runs, so a custom
+`daemonset.nodeSelector` intentionally narrows collection coverage.
+`deployment.nodeSelector` controls only Deployment placement and does not limit
+the nodes covered by the DaemonSet.
 
 Kubelet pod snapshots omit the kubelet-local `kubernetes.io/config.seen`
 (first observation time) and `kubernetes.io/config.source` (configuration source)

@@ -120,7 +120,7 @@ spec:
           env:
             {{- toYaml .Values.env | nindent 12 }}
           {{- end }}
-      {{- with .Values.nodeSelector }}
+      {{- with .Values.deployment.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
