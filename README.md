@@ -214,7 +214,11 @@ synchronization, including node-filtered/unscheduled pod caches and dependency
 caches. It returns `200 OK` once collection loops start, and becomes unready on
 shutdown. Built-in informer setup or cache-sync failures prevent readiness.
 When leader election is enabled, followers return `200 OK` while actively
-participating in the election; only the leader waits for informer cache sync.
+participating in the election, after validating all configured built-in resource
+names (including per-resource interval settings). Unknown names fail before
+election starts, so an invalid standby cannot become ready during a rollout.
+Only the leader waits for informer cache sync; API availability and permissions
+are checked when its informers run.
 
 Both the Deployment and DaemonSet use this endpoint as a readiness probe.
 Unknown built-in resource names are fatal configuration errors. Built-in

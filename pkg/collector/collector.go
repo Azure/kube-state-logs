@@ -58,7 +58,8 @@ type Collector struct {
 	leading         atomic.Bool
 }
 
-// Ready reports whether all enabled built-in caches have synced and collection is running.
+// Ready reports whether collection is running with synced built-in caches,
+// or a validated standby is participating in leader election.
 func (c *Collector) Ready() bool {
 	if c.config != nil && c.config.LeaderElection && c.electionRunning.Load() && !c.leading.Load() {
 		return true
@@ -346,10 +347,38 @@ func (c *Collector) registerCRDHandlers() {
 	}
 }
 
+// validateResources rejects unknown names before a standby can become ready.
+// Use the registered handlers so validation stays aligned with collection.
+func (c *Collector) validateResources() error {
+	validate := func(name string) error {
+		if name == "crd" || c.shouldUseKubeletHandler(name) {
+			return nil
+		}
+		if _, exists := c.handlers[name]; !exists {
+			return fmt.Errorf("unknown resource type: %s", name)
+		}
+		return nil
+	}
+	for _, name := range c.config.Resources {
+		if err := validate(name); err != nil {
+			return err
+		}
+	}
+	for _, resourceConfig := range c.config.ResourceConfigs {
+		if err := validate(resourceConfig.Name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Run starts the informers and collection loop
 func (c *Collector) Run(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return nil
+	}
+	if err := c.validateResources(); err != nil {
+		return err
 	}
 	if !c.config.LeaderElection {
 		return c.run(ctx)
@@ -445,15 +474,6 @@ func (c *Collector) run(ctx context.Context) (runErr error) {
 	}
 
 	klog.Info("Starting kube-state-logs with individual tickers...")
-
-	for _, resourceConfig := range c.config.ResourceConfigs {
-		if resourceConfig.Name == "crd" || c.shouldUseKubeletHandler(resourceConfig.Name) {
-			continue
-		}
-		if _, exists := c.handlers[resourceConfig.Name]; !exists {
-			return fmt.Errorf("unknown resource type: %s", resourceConfig.Name)
-		}
-	}
 
 	// Setup informers for each configured resource type (excluding "crd" which is handled separately)
 	for _, resourceType := range c.config.Resources {
