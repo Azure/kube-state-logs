@@ -4,7 +4,10 @@
   "properties": {
     "deploymentMode": {
       "type": "string",
-      "enum": ["simple", "advanced"]
+      "enum": [
+        "simple",
+        "advanced"
+      ]
     },
     "daemonset": {
       "type": "object",
@@ -19,6 +22,105 @@
         },
         "kubeletInsecureSkipVerify": {
           "type": "boolean"
+        },
+        "updateStrategy": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "RollingUpdate",
+                "OnDelete"
+              ]
+            },
+            "rollingUpdate": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "maxUnavailable": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9]+%$"
+                    }
+                  ]
+                },
+                "maxSurge": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9]+%$"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "RollingUpdate",
+                "Recreate"
+              ]
+            },
+            "rollingUpdate": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "maxUnavailable": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9]+%$"
+                    }
+                  ]
+                },
+                "maxSurge": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9]+%$"
+                    }
+                  ]
+                }
+              }
+            }
+          }
         }
       }
     }
