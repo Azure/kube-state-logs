@@ -110,40 +110,20 @@ clusters, or clusters where that feature is disabled, set
 `kubeletInsecureSkipVerify: true` only when kubelet serving certificates cannot
 be verified, and only on trusted cluster networks.
 
-#### Kubelet serving certificates and diagnostics
+#### Kubelet TLS
 
-The chart connects to `https://<node-ip>:10250`, using the node's `status.hostIP`.
-With verification enabled (the default), the kubelet serving certificate must
-chain to the projected service-account CA and contain that node IP as an **IP
-subject alternative name (SAN)**. A DNS SAN or Common Name alone does not match
-an IP address.
+With verification enabled, kubelet certificates must chain to the projected
+service-account CA and include the node's `status.hostIP` as an IP SAN; a DNS SAN
+or Common Name alone will not match. An `x509` IP-SAN error is a TLS failure
+before RBAC authorization. Check the certificate issuer and SANs, then reissue
+the certificate with a trusted issuer and correct IP SAN. Outside the chart,
+`--node-ip` can use a reachable address matching a DNS SAN.
 
-If logs contain `x509: cannot validate certificate for <node-ip> because it
-doesn't contain any IP SANs`, the TLS handshake failed before HTTP authorization;
-this is not an RBAC denial. Inspect the affected node collector's logs and
-the kubelet serving certificate's issuer and SANs. Reissue the serving certificate
-with the correct IP SAN and trusted issuer. For deployments outside the chart,
-`--node-ip` can also specify a reachable DNS address that matches a DNS SAN;
-the chart uses the node IP.
-
-For example, compare an affected collector's readiness and errors:
-
-```bash
-kubectl -n <namespace> logs <node-collector-pod> --since=15m
-kubectl -n <namespace> port-forward pod/<node-collector-pod> 8080:8080
-# In another terminal:
-curl -i http://localhost:8080/readyz
-curl -i http://localhost:8080/livez
-```
-
-Kubelet collection errors make `/readyz` return `503`, but `/livez` remains
-healthy so polling can recover without a restart. Check snapshot coverage
-downstream as well: readiness is a collection-health signal, not an ingestion
-acknowledgement. `daemonset.useKubeletAPI: false` is a verified-TLS alternative
-using API-server informers. As a temporary workaround only,
-`daemonset.kubeletInsecureSkipVerify: true` disables server certificate and
-hostname verification, exposing node traffic and the service-account token to
-impersonation; restore verification after fixing certificates.
+If certificates cannot be fixed, `daemonset.useKubeletAPI: false` uses
+API-server informers with verified TLS. Use
+`daemonset.kubeletInsecureSkipVerify: true` only as a temporary workaround on a
+trusted network: it disables certificate and hostname checks, exposing node
+traffic and the service-account token to impersonation.
 
 Both chart workloads select Linux nodes by default because the published image
 supports Linux only. Override the workload's `nodeSelector.kubernetes.io/os`
@@ -271,16 +251,11 @@ without blocking built-in resources or other CRDs. A CRD-only collector becomes
 ready even when none of its configured CRDs are available yet.
 Readiness probe failures themselves do not restart the container.
 This checks initial cache synchronization, not ongoing watch freshness.
-Collectors using kubelet polling also require every enabled kubelet resource
-(`pod` and/or `container`) to complete a successful collection. Until the first
-successful poll at each resource's configured interval, they remain unready.
-Any collection failure makes them unready; readiness recovers once each enabled
-resource's latest collection succeeds. A successful pod poll cannot mask a
-failed container collection. Optional `/stats/summary` failures still allow
-container snapshots without usage fields and do not gate readiness.
-Empty or filtered results count as successful collections. Polling continues while unready, and
-these failures do not affect `/livez` or restart the container. Resources not
-collected via kubelet and leader-election standbys retain the behavior above.
+Kubelet-polling collectors also require a successful latest collection for each
+enabled `pod` or `container` resource; until the first success or recovery from
+a failure, `/readyz` returns `503`. Polling continues while unready, and
+failures do not affect `/livez`. Optional `/stats/summary` failures do not gate
+container readiness.
 
 ### Liveness
 
