@@ -68,6 +68,52 @@
                 }
               }
             }
+          },
+          "if": {
+            "properties": {
+              "type": {
+                "const": "RollingUpdate"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "rollingUpdate": {
+                "description": "DaemonSet maxSurge and maxUnavailable cannot both be positive.",
+                "anyOf": [
+                  {
+                    "properties": {
+                      "maxUnavailable": {
+                        "anyOf": [
+                          {
+                            "const": 0
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^0+%$"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "maxSurge": {
+                        "anyOf": [
+                          {
+                            "const": 0
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^0+%$"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
           }
         }
       }
