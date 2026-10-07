@@ -110,6 +110,41 @@ clusters, or clusters where that feature is disabled, set
 `kubeletInsecureSkipVerify: true` only when kubelet serving certificates cannot
 be verified, and only on trusted cluster networks.
 
+#### Kubelet serving certificates and diagnostics
+
+The chart connects to `https://<node-ip>:10250`, using the node's `status.hostIP`.
+With verification enabled (the default), the kubelet serving certificate must
+chain to the projected service-account CA and contain that node IP as an **IP
+subject alternative name (SAN)**. A DNS SAN or Common Name alone does not match
+an IP address.
+
+If logs contain `x509: cannot validate certificate for <node-ip> because it
+doesn't contain any IP SANs`, the TLS handshake failed before HTTP authorization;
+this is not an RBAC denial. Inspect the affected node collector's logs and
+the kubelet serving certificate's issuer and SANs. Reissue the serving certificate
+with the correct IP SAN and trusted issuer. For deployments outside the chart,
+`--node-ip` can also specify a reachable DNS address that matches a DNS SAN;
+the chart uses the node IP.
+
+For example, compare an affected collector's readiness and errors:
+
+```bash
+kubectl -n <namespace> logs <node-collector-pod> --since=15m
+kubectl -n <namespace> port-forward pod/<node-collector-pod> 8080:8080
+# In another terminal:
+curl -i http://localhost:8080/readyz
+curl -i http://localhost:8080/livez
+```
+
+Kubelet collection errors make `/readyz` return `503`, but `/livez` remains
+healthy so polling can recover without a restart. Check snapshot coverage
+downstream as well: readiness is a collection-health signal, not an ingestion
+acknowledgement. `daemonset.useKubeletAPI: false` is a verified-TLS alternative
+using API-server informers. As a temporary workaround only,
+`daemonset.kubeletInsecureSkipVerify: true` disables server certificate and
+hostname verification, exposing node traffic and the service-account token to
+impersonation; restore verification after fixing certificates.
+
 Both chart workloads select Linux nodes by default because the published image
 supports Linux only. Override the workload's `nodeSelector.kubernetes.io/os`
 when using a custom image that supports another operating system.
@@ -232,9 +267,16 @@ without blocking built-in resources or other CRDs. A CRD-only collector becomes
 ready even when none of its configured CRDs are available yet.
 Readiness probe failures themselves do not restart the container.
 This checks initial cache synchronization, not ongoing watch freshness.
-Kubelet-only collectors have no informer caches to wait for, so they become
-ready when their collection loops start; the probe does not check kubelet
-polling success.
+Collectors using kubelet polling also require every enabled kubelet resource
+(`pod` and/or `container`) to complete a successful collection. Until the first
+successful poll at each resource's configured interval, they remain unready.
+Any collection failure makes them unready; readiness recovers once each enabled
+resource's latest collection succeeds. A successful pod poll cannot mask a
+failed container collection. Optional `/stats/summary` failures still allow
+container snapshots without usage fields and do not gate readiness.
+Empty or filtered results count as successful collections. Polling continues while unready, and
+these failures do not affect `/livez` or restart the container. Resources not
+collected via kubelet and leader-election standbys retain the behavior above.
 
 ### Liveness
 
