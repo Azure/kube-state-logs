@@ -56,15 +56,27 @@ type Collector struct {
 	ready           atomic.Bool
 	electionRunning atomic.Bool
 	leading         atomic.Bool
+	kubeletHealthMu sync.RWMutex
+	kubeletHealthy  map[string]bool
 }
 
-// Ready reports whether collection is running with synced built-in caches,
+// Ready reports whether collection is running with synced built-in caches and healthy kubelet collections,
 // or a validated standby is participating in leader election.
 func (c *Collector) Ready() bool {
 	if c.config != nil && c.config.LeaderElection && c.electionRunning.Load() && !c.leading.Load() {
 		return true
 	}
-	return c.ready.Load()
+	if !c.ready.Load() {
+		return false
+	}
+	c.kubeletHealthMu.RLock()
+	defer c.kubeletHealthMu.RUnlock()
+	for _, healthy := range c.kubeletHealthy {
+		if !healthy {
+			return false
+		}
+	}
+	return true
 }
 
 // validateTickerInterval ensures the interval is positive to prevent time.NewTicker panics
@@ -610,6 +622,15 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 		resourceConfigMap[rc.Name] = rc
 	}
 
+	c.kubeletHealthMu.Lock()
+	c.kubeletHealthy = make(map[string]bool)
+	for resourceName := range resourceIntervals {
+		if c.shouldUseKubeletHandler(resourceName) {
+			c.kubeletHealthy[resourceName] = false
+		}
+	}
+	c.kubeletHealthMu.Unlock()
+
 	// Start tickers for all resources
 	for resourceName, interval := range resourceIntervals {
 		// Check if this should use a kubelet handler
@@ -735,6 +756,11 @@ func (c *Collector) collectAndLogResource(ctx context.Context, resourceName stri
 // collectAndLogKubeletResource collects and logs data for a kubelet-based resource
 func (c *Collector) collectAndLogKubeletResource(ctx context.Context, resourceName string, handler interfaces.KubeletHandler) error {
 	entries, err := handler.Collect(ctx, c.config.Namespaces)
+	c.kubeletHealthMu.Lock()
+	if c.kubeletHealthy != nil {
+		c.kubeletHealthy[resourceName] = err == nil
+	}
+	c.kubeletHealthMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("failed to collect %s from kubelet: %w", resourceName, err)
 	}

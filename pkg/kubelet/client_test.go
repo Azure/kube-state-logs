@@ -4,7 +4,15 @@
 package kubelet
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +22,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -164,6 +173,80 @@ func TestNewClientFailsClosedWhenCAIsUnavailable(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("NewClient() succeeded without a CA certificate")
+	}
+}
+
+func TestClientVerifiesIPSubjectAlternativeNames(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		ipSAN    bool
+		insecure bool
+		wantErr  bool
+	}{
+		{name: "DNS SAN only", wantErr: true},
+		{name: "matching IP SAN", ipSAN: true},
+		{name: "explicit insecure workaround", insecure: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cert := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				DNSNames:     []string{"kubelet.example.test"},
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(time.Hour),
+				KeyUsage:     x509.KeyUsageDigitalSignature,
+				ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			}
+			if tt.ipSAN {
+				cert.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
+			}
+			der, err := x509.CreateCertificate(rand.Reader, cert, cert, &key.PublicKey, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte("{}"))
+			}))
+			server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
+			server.StartTLS()
+			defer server.Close()
+
+			caPath := filepath.Join(t.TempDir(), "ca.crt")
+			if err := os.WriteFile(caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			tokenPath := filepath.Join(t.TempDir(), "token")
+			if err := os.WriteFile(tokenPath, []byte("test-token"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			client, err := NewClient(ClientConfig{
+				NodeIP:             "127.0.0.1",
+				Port:               server.Listener.Addr().(*net.TCPAddr).Port,
+				CAPath:             caPath,
+				TokenPath:          tokenPath,
+				InsecureSkipVerify: tt.insecure,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, collect := range []func() error{
+				func() error { _, err := client.GetPods(t.Context()); return err },
+				func() error { _, err := client.GetStatsSummary(t.Context()); return err },
+			} {
+				err := collect()
+				if tt.wantErr {
+					var hostnameErr x509.HostnameError
+					if !errors.As(err, &hostnameErr) {
+						t.Fatalf("request error = %v, want IP SAN verification failure", err)
+					}
+				} else if err != nil {
+					t.Fatalf("request failed: %v", err)
+				}
+			}
+		})
 	}
 }
 

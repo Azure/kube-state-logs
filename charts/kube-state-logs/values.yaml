@@ -110,6 +110,7 @@ daemonset:
   # Port for the kubelet API (default: 10250)
   kubeletPort: 10250
   # Verify kubelet serving certificates using the projected service-account CA.
+  # The serving certificate must contain the node's status.hostIP as an IP SAN.
   # Set to true only for legacy clusters whose kubelet certificates cannot be
   # verified, and only when node traffic remains on a trusted cluster network.
   kubeletInsecureSkipVerify: false

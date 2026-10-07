@@ -110,6 +110,21 @@ clusters, or clusters where that feature is disabled, set
 `kubeletInsecureSkipVerify: true` only when kubelet serving certificates cannot
 be verified, and only on trusted cluster networks.
 
+#### Kubelet TLS
+
+With verification enabled, kubelet certificates must chain to the projected
+service-account CA and include the node's `status.hostIP` as an IP SAN; a DNS SAN
+or Common Name alone will not match. An `x509` IP-SAN error is a TLS failure
+before RBAC authorization. Check the certificate issuer and SANs, then reissue
+the certificate with a trusted issuer and correct IP SAN. Outside the chart,
+`--node-ip` can use a reachable address matching a DNS SAN.
+
+If certificates cannot be fixed, `daemonset.useKubeletAPI: false` uses
+API-server informers with verified TLS. Use
+`daemonset.kubeletInsecureSkipVerify: true` only as a temporary workaround on a
+trusted network: it disables certificate and hostname checks, exposing node
+traffic and the service-account token to impersonation.
+
 Both chart workloads select Linux nodes by default because the published image
 supports Linux only. Override the workload's `nodeSelector.kubernetes.io/os`
 when using a custom image that supports another operating system.
@@ -236,9 +251,11 @@ without blocking built-in resources or other CRDs. A CRD-only collector becomes
 ready even when none of its configured CRDs are available yet.
 Readiness probe failures themselves do not restart the container.
 This checks initial cache synchronization, not ongoing watch freshness.
-Kubelet-only collectors have no informer caches to wait for, so they become
-ready when their collection loops start; the probe does not check kubelet
-polling success.
+Kubelet-polling collectors also require a successful latest collection for each
+enabled `pod` or `container` resource; until the first success or recovery from
+a failure, `/readyz` returns `503`. Polling continues while unready, and
+failures do not affect `/livez`. Optional `/stats/summary` failures do not gate
+container readiness.
 
 ### Liveness
 

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -165,13 +166,32 @@ func TestRunReadinessWaitsForBuiltInCaches(t *testing.T) {
 	}
 }
 
+type readinessKubeletHandler struct {
+	failing atomic.Bool
+	calls   atomic.Int32
+}
+
+func (h *readinessKubeletHandler) Collect(context.Context, []string) ([]any, error) {
+	h.calls.Add(1)
+	if h.failing.Load() {
+		return nil, errors.New("kubelet TLS verification failed: missing IP SANs")
+	}
+	return nil, nil
+}
+
 func TestRunReadinessKubeletOnly(t *testing.T) {
 	c, _, _, _ := newReadinessTestCollector(t)
 	c.config.Resources = []string{"pod"}
+	c.config.ResourceConfigs = []config.ResourceConfig{{Name: "container", Interval: 10 * time.Millisecond}}
+	c.config.LogInterval = 10 * time.Millisecond
 	c.config.UseKubeletAPI = true
 	c.podFactory = nil
 	c.kubeletClient = &kubelet.Client{}
-	c.kubeletHandlers = map[string]interfaces.KubeletHandler{"pod": pendingPodHandler{}}
+	podHandler := &readinessKubeletHandler{}
+	containerHandler := &readinessKubeletHandler{}
+	podHandler.failing.Store(true)
+	containerHandler.failing.Store(true)
+	c.kubeletHandlers = map[string]interfaces.KubeletHandler{"pod": podHandler, "container": containerHandler}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	var runErr error
@@ -187,11 +207,39 @@ func TestRunReadinessKubeletOnly(t *testing.T) {
 			t.Error("collector did not stop")
 		}
 	})
+	waitFor := func(message string, condition func() bool) {
+		t.Helper()
+		if err := wait.PollUntilContextTimeout(t.Context(), time.Millisecond, 5*time.Second, true, func(context.Context) (bool, error) {
+			return condition(), nil
+		}); err != nil {
+			t.Fatalf("%s: %v", message, err)
+		}
+	}
+	waitFor("collection loops did not start", func() bool {
+		return podHandler.calls.Load() >= 2 && containerHandler.calls.Load() >= 2
+	})
+	if c.Ready() {
+		t.Fatal("collector is ready with failing kubelet collections")
+	}
+	podHandler.failing.Store(false)
+	waitFor("pod collection did not recover", func() bool {
+		c.kubeletHealthMu.RLock()
+		defer c.kubeletHealthMu.RUnlock()
+		return c.kubeletHealthy["pod"]
+	})
+	if c.Ready() {
+		t.Fatal("successful pod collection masked container collection failure")
+	}
+	containerHandler.failing.Store(false)
 	if err := wait.PollUntilContextTimeout(t.Context(), time.Millisecond, 5*time.Second, true, func(context.Context) (bool, error) {
 		return c.Ready(), nil
 	}); err != nil {
 		t.Fatalf("kubelet-only collector did not become ready: %v", err)
 	}
+	containerHandler.failing.Store(true)
+	waitFor("collector stayed ready after container collection failed", func() bool { return !c.Ready() })
+	containerHandler.failing.Store(false)
+	waitFor("collector did not recover readiness", c.Ready)
 	cancel()
 	select {
 	case <-done:
@@ -203,6 +251,45 @@ func TestRunReadinessKubeletOnly(t *testing.T) {
 	}
 	if c.Ready() {
 		t.Fatal("kubelet-only collector is ready after shutdown")
+	}
+}
+
+func TestReadyWaitsForEveryKubeletResource(t *testing.T) {
+	for _, resourceNames := range [][]string{{"pod"}, {"container"}, {"pod", "container"}} {
+		t.Run(strings.Join(resourceNames, ","), func(t *testing.T) {
+			c := &Collector{
+				config: &config.Config{
+					UseKubeletAPI: true,
+					Resources:     resourceNames,
+					LogInterval:   time.Hour,
+				},
+				kubeletClient:   &kubelet.Client{},
+				kubeletHandlers: map[string]interfaces.KubeletHandler{},
+			}
+			for _, name := range resourceNames {
+				c.kubeletHandlers[name] = &readinessKubeletHandler{}
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			c.startResourceTickers(ctx)
+			t.Cleanup(func() { cancel(); c.wg.Wait() })
+			c.ready.Store(true)
+			for i, name := range resourceNames {
+				if c.Ready() {
+					t.Fatalf("collector became ready before %s collected", name)
+				}
+				if err := c.collectAndLogKubeletResource(ctx, name, c.kubeletHandlers[name]); err != nil {
+					t.Fatal(err)
+				}
+				if got, want := c.Ready(), i == len(resourceNames)-1; got != want {
+					t.Fatalf("Ready() = %t, want %t", got, want)
+				}
+			}
+			c.ready.Store(false)
+			if c.Ready() {
+				t.Fatal("healthy kubelet collections masked stopped collection loops")
+			}
+		})
 	}
 }
 
