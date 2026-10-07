@@ -15,7 +15,9 @@ import (
 	"github.com/azure/kube-state-logs/pkg/collector/resources"
 	"github.com/azure/kube-state-logs/pkg/config"
 	"github.com/azure/kube-state-logs/pkg/interfaces"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -276,6 +278,79 @@ func TestRunRetriesRecoverableAPIErrors(t *testing.T) {
 			}
 			if attempts.Load() < 2 {
 				t.Fatal("informer did not retry the failed list")
+			}
+		})
+	}
+}
+
+// A healthy old replica holds the Lease while replacement replicas start.
+// Invalid replacements must fail before they can report standby readiness.
+func TestRunValidatesResourcesBeforeLeaderElection(t *testing.T) {
+	for _, source := range []string{"resources", "resource-configs", "valid standby"} {
+		t.Run(source, func(t *testing.T) {
+			c, client, _, _ := newReadinessTestCollector(t)
+			c.client = client
+			c.config.LeaderElection = true
+			c.config.LeaderElectionLeaseName = "rollout"
+			c.config.LeaderElectionLeaseNamespace = "default"
+			c.config.LeaderElectionIdentity = "replacement"
+			c.config.LeaderElectionLeaseDuration = 30 * time.Second
+			c.config.LeaderElectionRenewDeadline = 20 * time.Second
+			c.config.LeaderElectionRetryPeriod = time.Second
+			switch source {
+			case "resources":
+				c.config.Resources = []string{"unknown"}
+			case "resource-configs":
+				c.config.ResourceConfigs = []config.ResourceConfig{{Name: "unknown", Interval: time.Hour}}
+			case "valid standby":
+				c.config.Resources = []string{"pod", "crd"}
+				c.handlers["pod"] = resources.NewPodHandler(client)
+			}
+			holder := "healthy-old-replica"
+			duration := int32(300)
+			now := metav1.NowMicro()
+			_, err := client.CoordinationV1().Leases("default").Create(t.Context(), &coordinationv1.Lease{
+				ObjectMeta: metav1.ObjectMeta{Name: "rollout", Namespace: "default"},
+				Spec: coordinationv1.LeaseSpec{
+					HolderIdentity: &holder, LeaseDurationSeconds: &duration,
+					AcquireTime: &now, RenewTime: &now,
+				},
+			}, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			client.ClearActions()
+			cancel, done, runErr := runCollectorForTest(t, c)
+			if err := wait.PollUntilContextTimeout(t.Context(), time.Millisecond, 5*time.Second, true, func(context.Context) (bool, error) {
+				select {
+				case <-done:
+					return true, nil
+				default:
+					return c.Ready(), nil
+				}
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if source == "valid standby" {
+				if !c.Ready() || c.leading.Load() {
+					t.Fatal("valid replacement should be ready as a standby")
+				}
+				cancel()
+				<-done
+				if *runErr != nil {
+					t.Fatal(*runErr)
+				}
+				return
+			}
+			if c.Ready() {
+				t.Fatal("invalid replacement reported Ready before acquiring leadership")
+			}
+			<-done
+			if *runErr == nil || !strings.Contains((*runErr).Error(), "unknown resource type: unknown") {
+				t.Fatalf("Run() error = %v, want unknown resource error", *runErr)
+			}
+			if actions := client.Actions(); len(actions) != 0 {
+				t.Fatalf("invalid replacement contacted Kubernetes before validation: %v", actions)
 			}
 		})
 	}
