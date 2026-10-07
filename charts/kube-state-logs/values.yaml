@@ -70,6 +70,13 @@ deployment:
   # Multiple replicas require one eligible node per replica because the chart
   # applies required pod anti-affinity by kubernetes.io/hostname.
   replicas: 1
+  strategy:
+    # RollingUpdate or Recreate. rollingUpdate is ignored for Recreate.
+    type: RollingUpdate
+    rollingUpdate:
+      # Absolute numbers or percentages.
+      maxUnavailable: 1
+      maxSurge: 1
   leaderElection:
     enabled: false
     # Empty uses the Deployment name.
@@ -90,6 +97,13 @@ deployment:
 
 # DaemonSet settings (advanced mode only)
 daemonset:
+  updateStrategy:
+    # RollingUpdate or OnDelete. rollingUpdate is ignored for OnDelete.
+    type: RollingUpdate
+    rollingUpdate:
+      # Absolute numbers or percentages. To use maxSurge, set maxUnavailable to 0.
+      maxUnavailable: 1
+      # maxSurge: 0
   # Override the OS selector only with an image supporting that operating system.
   nodeSelector:
     kubernetes.io/os: linux

@@ -231,6 +231,54 @@ jobs:
             exit 1
           fi
 
+      - name: Validate DaemonSet rollout limits
+        run: |
+          set -euo pipefail
+          chart=charts/kube-state-logs
+          limits=daemonset.updateStrategy.rollingUpdate
+
+          # A surge override must also clear the merged maxUnavailable default.
+          for surge in 1 25%; do
+            if helm template invalid "$chart" --set deploymentMode=advanced \
+              --set "$limits.maxSurge=$surge" >/dev/null 2>&1; then
+              echo "Positive maxSurge accepted with default maxUnavailable" >&2
+              exit 1
+            fi
+          done
+
+          for unavailable in 1 25%; do
+            for surge in 1 25%; do
+              if helm template invalid "$chart" --set deploymentMode=advanced \
+                --set "$limits.maxUnavailable=$unavailable" \
+                --set "$limits.maxSurge=$surge" >/dev/null 2>&1; then
+                echo "Conflicting DaemonSet rollout limits were accepted" >&2
+                exit 1
+              fi
+
+              rendered=$(helm template on-delete "$chart" --set deploymentMode=advanced \
+                --show-only templates/daemonset.yaml \
+                --set daemonset.updateStrategy.type=OnDelete \
+                --set "$limits.maxUnavailable=$unavailable" \
+                --set "$limits.maxSurge=$surge")
+              grep -q 'type: OnDelete' <<< "$rendered"
+              if grep -q 'rollingUpdate:' <<< "$rendered"; then
+                echo "OnDelete rendered ignored rollout limits" >&2
+                exit 1
+              fi
+            done
+          done
+
+          for zero in 0 0% 00%; do
+            for positive in 1 25%; do
+              helm template surge "$chart" --set deploymentMode=advanced \
+                --set "$limits.maxUnavailable=$zero" \
+                --set "$limits.maxSurge=$positive" >/dev/null
+              helm template unavailable "$chart" --set deploymentMode=advanced \
+                --set "$limits.maxUnavailable=$positive" \
+                --set "$limits.maxSurge=$zero" >/dev/null
+            done
+          done
+
       - name: Set up yq
         working-directory: ${{ runner.temp }}
         run: |

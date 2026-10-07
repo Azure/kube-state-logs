@@ -135,6 +135,32 @@ The selectors are independent, and each defaults to `kubernetes.io/os: linux`.
 `deployment.nodeSelector` applies in both simple and advanced modes;
 `daemonset.nodeSelector` applies only to the advanced-mode DaemonSet.
 
+Customize rollout behavior with `deployment.strategy` (both modes) and
+`daemonset.updateStrategy` (advanced mode only):
+
+```yaml
+deployment:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+daemonset:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: "10%"
+```
+
+The defaults are `RollingUpdate` with `maxUnavailable: 1` for both workloads
+and `maxSurge: 1` for the Deployment. Rolling-update limits accept absolute
+numbers or percentages. For DaemonSet surge updates, set `maxUnavailable: 0`
+and a positive `maxSurge`; both limits cannot be positive at the same time.
+Set `deployment.strategy.type: Recreate` to replace all Deployment pods before
+starting new ones, or `daemonset.updateStrategy.type: OnDelete` to update
+DaemonSet pods only when manually deleted. Rolling-update settings are omitted
+for these strategy types, so there is no need to clear the default values.
+
 Tolerations are also independent: `deployment.tolerations` defaults to `[]`,
 while `daemonset.tolerations` defaults to `[{operator: Exists}]` to tolerate all
 taints. Setting a custom list replaces that workload's defaults; setting `[]`
