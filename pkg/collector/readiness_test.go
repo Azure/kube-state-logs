@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/azure/kube-state-logs/pkg/collector/resources"
@@ -179,6 +180,95 @@ func (h *readinessKubeletHandler) Collect(context.Context, []string) ([]any, err
 	return nil, nil
 }
 
+func TestRunReadinessKubeletCollectsImmediately(t *testing.T) {
+	for _, failingResource := range []string{"", "pod", "container"} {
+		name := failingResource
+		if name == "" {
+			name = "healthy"
+		}
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				c, _, _, _ := newReadinessTestCollector(t)
+				c.config.Resources = []string{"pod"}
+				c.config.ResourceConfigs = []config.ResourceConfig{{Name: "container", Interval: 2 * time.Minute}}
+				c.config.LogInterval = time.Minute
+				c.config.UseKubeletAPI = true
+				c.podFactory = nil
+				c.kubeletClient = &kubelet.Client{}
+				podHandler := &readinessKubeletHandler{}
+				containerHandler := &readinessKubeletHandler{}
+				podHandler.failing.Store(failingResource == "pod")
+				containerHandler.failing.Store(failingResource == "container")
+				c.kubeletHandlers = map[string]interfaces.KubeletHandler{"pod": podHandler, "container": containerHandler}
+				ctx, cancel := context.WithCancel(t.Context())
+				done := make(chan error, 1)
+				started := time.Now()
+				go func() { done <- c.Run(ctx) }()
+				defer func() {
+					cancel()
+					synctest.Wait()
+					if err := <-done; err != nil {
+						t.Errorf("Run() error = %v", err)
+					}
+					if c.Ready() {
+						t.Error("collector is ready after shutdown")
+					}
+				}()
+
+				check := func(podCalls, containerCalls int32, ready bool) {
+					t.Helper()
+					synctest.Wait()
+					if got := podHandler.calls.Load(); got != podCalls {
+						t.Fatalf("pod collections = %d, want %d", got, podCalls)
+					}
+					if got := containerHandler.calls.Load(); got != containerCalls {
+						t.Fatalf("container collections = %d, want %d", got, containerCalls)
+					}
+					if got := c.Ready(); got != ready {
+						t.Fatalf("Ready() = %t, want %t", got, ready)
+					}
+				}
+				check(1, 1, failingResource == "")
+				if elapsed := time.Since(started); elapsed != 0 {
+					t.Fatalf("initial collection waited %v", elapsed)
+				}
+
+				podHandler.failing.Store(false)
+				containerHandler.failing.Store(false)
+				time.Sleep(time.Minute - time.Nanosecond)
+				check(1, 1, failingResource == "")
+				time.Sleep(time.Nanosecond)
+				check(2, 1, failingResource != "container")
+				time.Sleep(time.Minute)
+				check(3, 2, true)
+			})
+		})
+	}
+}
+
+func TestKubeletTickersSkipCollectionAfterCancellation(t *testing.T) {
+	c := &Collector{
+		config: &config.Config{
+			Resources:   []string{"pod", "container"},
+			LogInterval: time.Minute,
+		},
+		kubeletClient: &kubelet.Client{},
+		kubeletHandlers: map[string]interfaces.KubeletHandler{
+			"pod":       &readinessKubeletHandler{},
+			"container": &readinessKubeletHandler{},
+		},
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	c.startResourceTickers(ctx)
+	c.wg.Wait()
+	for name, handler := range c.kubeletHandlers {
+		if got := handler.(*readinessKubeletHandler).calls.Load(); got != 0 {
+			t.Errorf("%s collections = %d after cancellation, want 0", name, got)
+		}
+	}
+}
+
 func TestRunReadinessKubeletOnly(t *testing.T) {
 	c, _, _, _ := newReadinessTestCollector(t)
 	c.config.Resources = []string{"pod"}
@@ -265,20 +355,18 @@ func TestReadyWaitsForEveryKubeletResource(t *testing.T) {
 				},
 				kubeletClient:   &kubelet.Client{},
 				kubeletHandlers: map[string]interfaces.KubeletHandler{},
+				kubeletHealthy:  map[string]bool{},
 			}
 			for _, name := range resourceNames {
 				c.kubeletHandlers[name] = &readinessKubeletHandler{}
+				c.kubeletHealthy[name] = false
 			}
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			c.startResourceTickers(ctx)
-			t.Cleanup(func() { cancel(); c.wg.Wait() })
 			c.ready.Store(true)
 			for i, name := range resourceNames {
 				if c.Ready() {
 					t.Fatalf("collector became ready before %s collected", name)
 				}
-				if err := c.collectAndLogKubeletResource(ctx, name, c.kubeletHandlers[name]); err != nil {
+				if err := c.collectAndLogKubeletResource(t.Context(), name, c.kubeletHandlers[name]); err != nil {
 					t.Fatal(err)
 				}
 				if got, want := c.Ready(), i == len(resourceNames)-1; got != want {

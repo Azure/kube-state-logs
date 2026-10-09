@@ -653,14 +653,14 @@ func (c *Collector) startResourceTickers(ctx context.Context) {
 			c.wg.Go(func() {
 				ticker := time.Tick(validateTickerInterval(interval, resourceName))
 
-				for {
+				for ctx.Err() == nil {
+					if err := c.collectAndLogKubeletResource(ctx, resourceName, kubeletHandler); err != nil {
+						klog.Errorf("Kubelet collection failed for %s: %v", resourceName, err)
+					}
 					select {
 					case <-ctx.Done():
 						return
 					case <-ticker:
-						if err := c.collectAndLogKubeletResource(ctx, resourceName, kubeletHandler); err != nil {
-							klog.Errorf("Kubelet collection failed for %s: %v", resourceName, err)
-						}
 					}
 				}
 			})

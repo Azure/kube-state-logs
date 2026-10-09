@@ -253,7 +253,9 @@ Readiness probe failures themselves do not restart the container.
 This checks initial cache synchronization, not ongoing watch freshness.
 Kubelet-polling collectors also require a successful latest collection for each
 enabled `pod` or `container` resource; until the first success or recovery from
-a failure, `/readyz` returns `503`. Polling continues while unready, and
+a failure, `/readyz` returns `503`. The first collection runs immediately when
+collection loops start, without waiting for the configured interval; subsequent
+collections use their configured intervals. Polling continues while unready, and
 failures do not affect `/livez`. Optional `/stats/summary` failures do not gate
 container readiness.
 
