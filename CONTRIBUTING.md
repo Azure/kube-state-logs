@@ -2,7 +2,7 @@
 
 ## Local development
 
-Use Go 1.27.1 or newer. Run `go test ./...` and `gofmt -l .` before submitting
+Use Go 1.27.2 or newer. Run `go test ./...` and `gofmt -l .` before submitting
 changes. Run `make test` to exercise the same Microsoft Go/OpenSSL build used
 by CI; Docker is required for that target.
 
