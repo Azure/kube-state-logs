@@ -1,6 +1,6 @@
 module github.com/azure/kube-state-logs
 
-go 1.27.2
+go 1.27.3
 
 require (
 	k8s.io/api v0.33.2
