@@ -193,8 +193,8 @@ To add support for a new architecture:
 2. **Update `docker-merge` job** - Ensure the digest validation expects the correct number of architectures (currently expects exactly 2)
 
 3. **Verify Dockerfile compatibility** - Ensure base images support the new architecture:
-   - Build stage: `mcr.microsoft.com/oss/go/microsoft/golang:X.XX-fips-azurelinux3.0`
-   - Runtime stage: `mcr.microsoft.com/azurelinux/base/core:3.0`
+   - Build stage: `mcr.microsoft.com/azurelinux/base/core:3.0` (SHA256-pinned), with Go installed using `tdnf install golang`
+   - Runtime stage: `mcr.microsoft.com/azurelinux/distroless/base:3.0` (SHA256-pinned)
 
 4. **Test the build** - Run a test build to ensure CGO and all dependencies compile for the new platform
 

@@ -124,9 +124,9 @@ go test -v -run TestDeploymentHandler ./pkg/collector/resources/
 
 The Dockerfile uses **Azure Linux** with **Microsoft Go** for FIPS (Federal Information Processing Standards) compliance:
 
-- **Source stage**: `mcr.microsoft.com/azurelinux/base/core:3.0`
-- **Go version**: `ARG GO_VERSION=1.27.3`
-- **Runtime stage**: `mcr.microsoft.com/azurelinux/distroless/minimal:3.0`
+- **Source stage**: `mcr.microsoft.com/azurelinux/base/core:3.0`, pinned by SHA256 digest
+- **Go installation**: Azure Linux `golang` package installed with `tdnf`
+- **Runtime stage**: `mcr.microsoft.com/azurelinux/distroless/base:3.0`, pinned by SHA256 digest
 - **Crypto backend**: Microsoft Go 1.27 enables the OpenSSL backend by default; no `GOEXPERIMENT` override is needed.
 
 ### Updating Go Version
@@ -134,7 +134,7 @@ The Dockerfile uses **Azure Linux** with **Microsoft Go** for FIPS (Federal Info
 When updating the Go version, the following files must be changed:
 
 1. **`go.mod`** - Update the `go` directive (e.g., `go 1.27.3`)
-2. **`Dockerfile`** - Update `GO_VERSION` and the `GO_SHA256SUM_*` values
+2. **`Dockerfile`** - Verify the `tdnf`-installed `golang` package meets the required version; refresh the base image digest as needed
 3. **`.github/workflows/ci.yml`** - Update `go-version` in setup-go jobs
 4. **`AGENTS.md`** - Update the documented Go version in Project Overview
 
@@ -142,9 +142,6 @@ Example version update:
 ```bash
 # go.mod
 go 1.27.3
-
-# Dockerfile
-ARG GO_VERSION=1.27.3
 
 # .github/workflows/ci.yml
 go-version: '1.27.3'

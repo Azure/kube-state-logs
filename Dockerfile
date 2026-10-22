@@ -1,27 +1,7 @@
 # Source stage
-FROM mcr.microsoft.com/azurelinux/base/core:3.0 AS source
+FROM mcr.microsoft.com/azurelinux/base/core:3.0@sha256:bd88359666e3f20296e7fe639a480dfd3c3c8eba299b21f26e4560353e21a656 AS source
 
-ARG TARGETARCH
-ARG GO_VERSION=1.27.3
-
-# SHA256 Checksums can be found on the releases pages at https://github.com/microsoft/go/blob/microsoft/main/eng/doc/Downloads.md
-ARG GO_SHA256SUM_AMD64=6fa66bc2b0d907ec4583b5704c51a8b07299ef2fee0e5b7e5737a0446e9e0145
-ARG GO_SHA256SUM_ARM64=133b5020784b7b93d472d2a94107ca17a7d032dbdc7fbdb2fd6ffaa1166c86da
-
-ENV GOROOT=/usr/local/go
-ENV GOBIN=/usr/local/go/bin
-ENV PATH=$PATH:$GOROOT/bin
-
-RUN tdnf update -y && tdnf install -y gcc make binutils glibc-devel kernel kernel-headers ca-certificates tar awk curl curl-libs krb5 gcc build-essential jq && tdnf remove -y patch
-
-# https://github.com/microsoft/go/releases
-RUN GO_ARCHIVE="go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" && \
-    if [ "${TARGETARCH}" = "arm64" ]; then GO_SHA256SUM="${GO_SHA256SUM_ARM64}"; else GO_SHA256SUM="${GO_SHA256SUM_AMD64}"; fi && \
-    curl --retry 5 --retry-delay 10 --retry-all-errors -fOL "https://aka.ms/golang/release/latest/${GO_ARCHIVE}" \
-        && echo "${GO_SHA256SUM}  ${GO_ARCHIVE}" | sha256sum --check \
-        && tar -C /usr/local -zxf "${GO_ARCHIVE}" \
-        && rm "${GO_ARCHIVE}" \
-        && go version
+RUN tdnf update -y && tdnf install -y golang gcc make binutils glibc-devel kernel kernel-headers ca-certificates tar awk curl curl-libs krb5 gcc build-essential jq && tdnf remove -y patch && go version
 
 WORKDIR /src
 
@@ -43,7 +23,7 @@ FROM source AS build
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/kube-state-logs .
 
 # Runtime stage
-FROM mcr.microsoft.com/azurelinux/distroless/base:3.0
+FROM mcr.microsoft.com/azurelinux/distroless/base:3.0@sha256:6b85a86416a29cdcfd404e9fbd9c5ef49cc0612882cecc702535dcac39c9446c
 
 COPY --from=build /out/kube-state-logs /kube-state-logs
 
