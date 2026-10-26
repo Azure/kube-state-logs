@@ -4,6 +4,8 @@
 package resources
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -14,8 +16,92 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	testutils "github.com/azure/kube-state-logs/pkg/collector/testutils"
+	"github.com/azure/kube-state-logs/pkg/kubelet"
 	"github.com/azure/kube-state-logs/pkg/types"
 )
+
+func TestPodSnapshotsDNS(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		policy     corev1.DNSPolicy
+		config     *corev1.PodDNSConfig
+		wantConfig string
+	}{
+		{name: "unset", wantConfig: `null`},
+		{name: "cluster first", policy: corev1.DNSClusterFirst, wantConfig: `null`},
+		{name: "host network", policy: corev1.DNSClusterFirstWithHostNet, wantConfig: `null`},
+		{name: "default with empty config", policy: corev1.DNSDefault, config: &corev1.PodDNSConfig{}, wantConfig: `{"Nameservers":null,"Searches":null,"Options":null}`},
+		{
+			name: "custom", policy: corev1.DNSNone,
+			config: &corev1.PodDNSConfig{
+				Nameservers: []string{"1.1.1.1", "2001:4860:4860::8888"},
+				Searches:    []string{"example.com", "svc.cluster.local"},
+				Options: []corev1.PodDNSConfigOption{
+					{Name: "ndots", Value: new("2")},
+					{Name: "edns0"},
+					{Name: "empty", Value: new("")},
+				},
+			},
+			wantConfig: `{"Nameservers":["1.1.1.1","2001:4860:4860::8888"],"Searches":["example.com","svc.cluster.local"],"Options":[{"Name":"ndots","Value":"2"},{"Name":"edns0","Value":null},{"Name":"empty","Value":""}]}`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := createTestPod("dns-pod", "default", corev1.PodRunning)
+			pod.Spec.DNSPolicy = tt.policy
+			pod.Spec.DNSConfig = tt.config
+			original := pod.DeepCopy()
+
+			client := fake.NewSimpleClientset()
+			handler := NewPodHandler(client)
+			factory := informers.NewSharedInformerFactory(client, time.Hour)
+			if err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour); err != nil {
+				t.Fatal(err)
+			}
+			if err := handler.GetInformer().GetStore().Add(pod); err != nil {
+				t.Fatal(err)
+			}
+			kubeletHandler := NewKubeletPodHandler(&staticSnapshotSource{
+				snapshot: &kubelet.Snapshot{Pods: []corev1.Pod{*pod}},
+			}, nil, "")
+
+			for _, collector := range []struct {
+				name    string
+				collect func() ([]any, error)
+			}{
+				{name: "informer", collect: func() ([]any, error) { return handler.Collect(t.Context(), nil) }},
+				{name: "kubelet", collect: func() ([]any, error) { return kubeletHandler.Collect(t.Context(), nil) }},
+			} {
+				t.Run(collector.name, func(t *testing.T) {
+					entries, err := collector.collect()
+					if err != nil || len(entries) != 1 {
+						t.Fatalf("Collect() = %v, %v; want one entry", entries, err)
+					}
+					encoded, err := json.Marshal(entries[0])
+					if err != nil {
+						t.Fatal(err)
+					}
+					var fields map[string]json.RawMessage
+					if err := json.Unmarshal(encoded, &fields); err != nil {
+						t.Fatal(err)
+					}
+					wantPolicy, err := json.Marshal(string(tt.policy))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if string(fields["DNSPolicy"]) != string(wantPolicy) {
+						t.Errorf("DNSPolicy = %s, want %s", fields["DNSPolicy"], wantPolicy)
+					}
+					if string(fields["DNSConfig"]) != tt.wantConfig {
+						t.Errorf("DNSConfig = %s, want %s", fields["DNSConfig"], tt.wantConfig)
+					}
+				})
+			}
+			if !reflect.DeepEqual(pod, original) {
+				t.Fatal("collection mutated the source pod")
+			}
+		})
+	}
+}
 
 // createTestPod creates a test pod with various configurations
 func createTestPod(name, namespace string, phase corev1.PodPhase) *corev1.Pod {

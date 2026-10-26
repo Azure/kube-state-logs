@@ -306,6 +306,20 @@ func CreatePodLogEntry(pod *corev1.Pod, nodeLabels map[string]string) types.PodD
 
 	containerMetrics := aggregateContainerResources(pod)
 
+	var dnsConfig *types.PodDNSConfigData
+	if config := pod.Spec.DNSConfig; config != nil {
+		dnsConfig = &types.PodDNSConfigData{
+			Nameservers: config.Nameservers,
+			Searches:    config.Searches,
+		}
+		for _, option := range config.Options {
+			dnsConfig.Options = append(dnsConfig.Options, types.PodDNSConfigOptionData{
+				Name:  option.Name,
+				Value: option.Value,
+			})
+		}
+	}
+
 	data := types.PodData{
 		Timestamp:                 time.Now(),
 		ResourceType:              "pod",
@@ -340,6 +354,8 @@ func CreatePodLogEntry(pod *corev1.Pod, nodeLabels map[string]string) types.PodD
 		StatusReason:              statusReason,
 		Unschedulable:             unschedulable,
 		RestartPolicy:             string(pod.Spec.RestartPolicy),
+		DNSPolicy:                 string(pod.Spec.DNSPolicy),
+		DNSConfig:                 dnsConfig,
 		ServiceAccount:            pod.Spec.ServiceAccountName,
 		SchedulerName:             pod.Spec.SchedulerName,
 		OverheadCPUCores:          overheadCPUCores,

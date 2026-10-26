@@ -128,6 +128,8 @@ type PodData struct {
 	StatusReason           string            `json:"StatusReason"`
 	Unschedulable          *bool             `json:"Unschedulable"`
 	RestartPolicy          string            `json:"RestartPolicy"`
+	DNSPolicy              string            `json:"DNSPolicy"`
+	DNSConfig              *PodDNSConfigData `json:"DNSConfig"`
 	ServiceAccount         string            `json:"ServiceAccount"`
 	SchedulerName          string            `json:"SchedulerName"`
 	OverheadCPUCores       string            `json:"OverheadCPUCores"`
@@ -146,6 +148,19 @@ type PodData struct {
 	TotalRequestsMemoryBytes  *int64 `json:"TotalRequestsMemoryBytes"`
 	TotalLimitsCPUMillicore   *int64 `json:"TotalLimitsCPUMillicore"`
 	TotalLimitsMemoryBytes    *int64 `json:"TotalLimitsMemoryBytes"`
+}
+
+// PodDNSConfigData represents pod DNS resolver configuration.
+type PodDNSConfigData struct {
+	Nameservers []string                 `json:"Nameservers"`
+	Searches    []string                 `json:"Searches"`
+	Options     []PodDNSConfigOptionData `json:"Options"`
+}
+
+// PodDNSConfigOptionData represents a DNS resolver option, whose value may be absent.
+type PodDNSConfigOptionData struct {
+	Name  string  `json:"Name"`
+	Value *string `json:"Value"`
 }
 
 // TolerationData represents pod toleration information
