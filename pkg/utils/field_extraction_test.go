@@ -25,7 +25,7 @@ func TestSanitizeCustomField(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name: "container list drops env and args and keeps other fields",
+			name: "container list drops env, args and command and keeps other fields",
 			path: "spec.template.spec.containers",
 			value: []any{
 				map[string]any{
@@ -49,9 +49,8 @@ func TestSanitizeCustomField(t *testing.T) {
 			},
 			want: []any{
 				map[string]any{
-					"name":    "main",
-					"image":   "busybox",
-					"command": []any{"/app"},
+					"name":  "main",
+					"image": "busybox",
 					"envFrom": []any{
 						map[string]any{"secretRef": map[string]any{"name": "s"}},
 					},
@@ -171,6 +170,20 @@ func TestSanitizeCustomField(t *testing.T) {
 			wantOK:  true,
 		},
 		{
+			name:   "selected command list is omitted",
+			path:   "spec.command",
+			value:  []any{"sh", "-c", "run --token=secret"},
+			wantOK: false,
+		},
+		{
+			name:    "selected command list is kept when included",
+			path:    "spec.command",
+			value:   []any{"/app"},
+			options: CustomFieldOptions{IncludeContainerCommand: true},
+			want:    []any{"/app"},
+			wantOK:  true,
+		},
+		{
 			name:   "args that is not a list is kept",
 			path:   "spec",
 			value:  map[string]any{"args": "--verbose"},
@@ -178,13 +191,14 @@ func TestSanitizeCustomField(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name: "env and args are removed independently",
+			name: "env, args and command are removed independently",
 			path: "spec.containers",
 			value: []any{
 				map[string]any{
-					"name": "main",
-					"env":  []any{map[string]any{"name": "A", "value": "1"}},
-					"args": []any{"--token=secret"},
+					"name":    "main",
+					"env":     []any{map[string]any{"name": "A", "value": "1"}},
+					"args":    []any{"--token=secret"},
+					"command": []any{"/app"},
 				},
 			},
 			options: CustomFieldOptions{IncludeContainerArgs: true},
@@ -210,15 +224,16 @@ func TestSanitizeCustomField(t *testing.T) {
 
 func TestSanitizeCustomFieldDoesNotModifyInput(t *testing.T) {
 	container := map[string]any{
-		"name": "main",
-		"env":  []any{map[string]any{"name": "API_TOKEN", "value": "secret"}},
-		"args": []any{"--token=secret"},
+		"name":    "main",
+		"env":     []any{map[string]any{"name": "API_TOKEN", "value": "secret"}},
+		"args":    []any{"--token=secret"},
+		"command": []any{"/app"},
 	}
 	containers := []any{container}
 
 	SanitizeCustomField("spec.containers", containers, CustomFieldOptions{})
 
-	for _, field := range []string{"env", "args"} {
+	for _, field := range []string{"env", "args", "command"} {
 		if _, ok := container[field]; !ok {
 			t.Fatalf("SanitizeCustomField() removed %s from the input object", field)
 		}

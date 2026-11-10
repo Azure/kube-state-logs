@@ -451,7 +451,7 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 	t.Logf("JSON output: %s", string(jsonData))
 }
 
-func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
+func TestCRDHandler_ContainerEnvArgsAndCommand(t *testing.T) {
 	gvr := schema.GroupVersionResource{
 		Group:    "example.com",
 		Version:  "v1",
@@ -472,7 +472,8 @@ func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
 					"env": []any{
 						map[string]any{"name": "TOP_LEVEL_TOKEN", "value": "top-level-env-secret"},
 					},
-					"args": []any{"--token=top-level-args-secret"},
+					"args":    []any{"--token=top-level-args-secret"},
+					"command": []any{"sh", "-c", "run --token=top-level-command-secret"},
 					"template": map[string]any{
 						"spec": map[string]any{
 							"containers": []any{
@@ -482,7 +483,8 @@ func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
 									"env": []any{
 										map[string]any{"name": "API_TOKEN", "value": "container-env-secret"},
 									},
-									"args": []any{"--api-key=container-args-secret"},
+									"args":    []any{"--api-key=container-args-secret"},
+									"command": []any{"sh", "-c", "run --key=container-command-secret"},
 								},
 							},
 							"initContainers": []any{
@@ -491,7 +493,8 @@ func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
 									"env": []any{
 										map[string]any{"name": "DB_PASSWORD", "value": "init-env-secret"},
 									},
-									"args": []any{"--password=init-args-secret"},
+									"args":    []any{"--password=init-args-secret"},
+									"command": []any{"sh", "-c", "init --password=init-command-secret"},
 								},
 							},
 						},
@@ -504,21 +507,24 @@ func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
 	customFields := []string{
 		"spec.env",
 		"spec.args",
+		"spec.command",
 		"spec.template",
 		"spec.template.spec.containers",
 		"spec.template.spec.initContainers",
 	}
 	envValues := []string{"top-level-env-secret", "container-env-secret", "init-env-secret", "API_TOKEN", "DB_PASSWORD"}
 	argsValues := []string{"top-level-args-secret", "container-args-secret", "init-args-secret"}
+	commandValues := []string{"top-level-command-secret", "container-command-secret", "init-command-secret"}
 
 	for _, tt := range []struct {
 		name    string
 		options utils.CustomFieldOptions
 	}{
-		{name: "env and args removed by default"},
+		{name: "env, args and command removed by default"},
 		{name: "env kept when included", options: utils.CustomFieldOptions{IncludeContainerEnv: true}},
 		{name: "args kept when included", options: utils.CustomFieldOptions{IncludeContainerArgs: true}},
-		{name: "env and args kept when included", options: utils.CustomFieldOptions{IncludeContainerEnv: true, IncludeContainerArgs: true}},
+		{name: "command kept when included", options: utils.CustomFieldOptions{IncludeContainerCommand: true}},
+		{name: "all kept when included", options: utils.CustomFieldOptions{IncludeContainerEnv: true, IncludeContainerArgs: true, IncludeContainerCommand: true}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
@@ -552,6 +558,7 @@ func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
 			}{
 				{envValues, tt.options.IncludeContainerEnv},
 				{argsValues, tt.options.IncludeContainerArgs},
+				{commandValues, tt.options.IncludeContainerCommand},
 			} {
 				for _, value := range check.values {
 					if got := strings.Contains(string(jsonData), value); got != check.want {
@@ -570,6 +577,9 @@ func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
 			if _, ok := result["spec.args"]; ok != tt.options.IncludeContainerArgs {
 				t.Errorf("spec.args present = %v, want %v", ok, tt.options.IncludeContainerArgs)
 			}
+			if _, ok := result["spec.command"]; ok != tt.options.IncludeContainerCommand {
+				t.Errorf("spec.command present = %v, want %v", ok, tt.options.IncludeContainerCommand)
+			}
 			containers, ok := result["spec.template.spec.containers"].([]any)
 			if !ok || len(containers) != 1 {
 				t.Fatalf("Expected one container in spec.template.spec.containers, got %v", result["spec.template.spec.containers"])
@@ -586,7 +596,7 @@ func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
 			}
 			cachedContainers, _, _ := unstructured.NestedSlice(cached.(*unstructured.Unstructured).Object, "spec", "template", "spec", "containers")
 			cachedContainer := cachedContainers[0].(map[string]any)
-			for _, field := range []string{"env", "args"} {
+			for _, field := range []string{"env", "args", "command"} {
 				if _, ok := cachedContainer[field]; !ok {
 					t.Errorf("Expected the informer cache object to keep its %s", field)
 				}

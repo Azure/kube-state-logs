@@ -192,8 +192,10 @@ config:
   logLevel: "info"              # debug, info, warn, error
   namespaces: ""                # Empty = all namespaces
   configmapIncludeValues: false # ConfigMap data values
-  crdIncludeContainerEnv: false # Container env lists in CRD custom fields
-  crdIncludeContainerArgs: false # Container args lists in CRD custom fields
+  # Keep container env, args or command lists in CRD custom fields
+  crdIncludeContainerEnv: false
+  crdIncludeContainerArgs: false
+  crdIncludeContainerCommand: false
   resourceConfigs:              # Per-resource settings; interval is optional
     - "pod:promote-node-labels=topology.kubernetes.io/zone"
     - "container:promote-node-labels=topology.kubernetes.io/zone"

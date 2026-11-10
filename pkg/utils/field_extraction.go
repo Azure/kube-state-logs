@@ -42,13 +42,15 @@ func ExtractField(obj map[string]any, path string) any {
 }
 
 // CustomFieldOptions selects which container fields are kept in CRD custom
-// fields. Container env and args lists often hold credentials such as API keys
-// and tokens, so both are removed unless included.
+// fields. Container env, args and command lists often hold credentials such as
+// API keys and tokens, so each is removed unless included.
 type CustomFieldOptions struct {
 	// IncludeContainerEnv keeps container env lists.
 	IncludeContainerEnv bool
 	// IncludeContainerArgs keeps container args lists.
 	IncludeContainerArgs bool
+	// IncludeContainerCommand keeps container command lists.
+	IncludeContainerCommand bool
 }
 
 func (o CustomFieldOptions) removedLists() []string {
@@ -59,13 +61,16 @@ func (o CustomFieldOptions) removedLists() []string {
 	if !o.IncludeContainerArgs {
 		removed = append(removed, "args")
 	}
+	if !o.IncludeContainerCommand {
+		removed = append(removed, "command")
+	}
 	return removed
 }
 
 // SanitizeCustomField returns a copy of a value selected by ExtractField
 // without the kubectl last-applied-configuration annotation, which holds a copy
-// of the whole spec, at any depth. Container env and args lists are removed as
-// well, at any depth, unless opts includes them: a pod template or container
+// of the whole spec, at any depth. Container env, args and command lists are
+// removed as well, at any depth, unless opts includes them: a pod template or container
 // spec selected as a custom field would otherwise log their literal values. ok
 // is false when the selected field is itself a removed list. The input is not
 // modified, so values from informer caches are safe to pass.

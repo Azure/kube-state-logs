@@ -165,17 +165,17 @@ config:
         - "status.lastTokenRefreshTime"
 ```
 
-By default, custom fields do not include container environment variables or
-arguments. Any `env` or `args` list in a selected value is removed, at any
-depth, and a selected field that is itself such a list is omitted. Selecting a
-pod template or a container list, such as `spec.template.spec.containers`,
-therefore logs the containers without their `env` and `args`, because literal
-environment values and arguments often hold credentials. Other container
-fields, including `command` and `envFrom` references, are kept. To keep the
-lists, set `crdIncludeContainerEnv: true` or `crdIncludeContainerArgs: true`;
-each applies to every configured CRD. To log specific variables of running
-containers instead, use the `container` resource's `containerEnvVars`
-allowlist.
+By default, custom fields do not include container environment variables,
+arguments or commands. Any `env`, `args` or `command` list in a selected value
+is removed, at any depth, and a selected field that is itself such a list is
+omitted. Selecting a pod template or a container list, such as
+`spec.template.spec.containers`, therefore logs the containers without their
+`env`, `args` and `command`, because these often hold credentials. Other
+container fields, including `image`, `resources` and `envFrom` references, are
+kept. To keep a list, set `crdIncludeContainerEnv`, `crdIncludeContainerArgs`
+or `crdIncludeContainerCommand` to `true`; each applies to every configured CRD.
+These settings are separate from `containerEnvVars`, which selects variables
+to log from running containers in `container` snapshots.
 
 The `kubectl.kubernetes.io/last-applied-configuration` annotation, which holds a
 copy of the spec, is always removed from selected values.
