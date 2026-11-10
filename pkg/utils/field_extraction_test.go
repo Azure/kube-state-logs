@@ -10,12 +10,12 @@ import (
 
 func TestSanitizeCustomField(t *testing.T) {
 	tests := []struct {
-		name                string
-		path                string
-		value               any
-		includeContainerEnv bool
-		want                any
-		wantOK              bool
+		name    string
+		path    string
+		value   any
+		options CustomFieldOptions
+		want    any
+		wantOK  bool
 	}{
 		{
 			name:   "scalar is unchanged",
@@ -25,12 +25,14 @@ func TestSanitizeCustomField(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name: "container list drops env and keeps other fields",
+			name: "container list drops env and args and keeps other fields",
 			path: "spec.template.spec.containers",
 			value: []any{
 				map[string]any{
-					"name":  "main",
-					"image": "busybox",
+					"name":    "main",
+					"image":   "busybox",
+					"command": []any{"/app"},
+					"args":    []any{"--token=secret"},
 					"env": []any{
 						map[string]any{"name": "API_TOKEN", "value": "secret"},
 						map[string]any{
@@ -47,8 +49,9 @@ func TestSanitizeCustomField(t *testing.T) {
 			},
 			want: []any{
 				map[string]any{
-					"name":  "main",
-					"image": "busybox",
+					"name":    "main",
+					"image":   "busybox",
+					"command": []any{"/app"},
 					"envFrom": []any{
 						map[string]any{"secretRef": map[string]any{"name": "s"}},
 					},
@@ -134,7 +137,7 @@ func TestSanitizeCustomField(t *testing.T) {
 					},
 				},
 			},
-			includeContainerEnv: true,
+			options: CustomFieldOptions{IncludeContainerEnv: true},
 			want: map[string]any{
 				"metadata": map[string]any{"annotations": map[string]any{}},
 				"spec": map[string]any{
@@ -146,18 +149,55 @@ func TestSanitizeCustomField(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name:                "selected env list is kept when included",
-			path:                "spec.env",
-			value:               []any{map[string]any{"name": "A", "value": "1"}},
-			includeContainerEnv: true,
-			want:                []any{map[string]any{"name": "A", "value": "1"}},
-			wantOK:              true,
+			name:    "selected env list is kept when included",
+			path:    "spec.env",
+			value:   []any{map[string]any{"name": "A", "value": "1"}},
+			options: CustomFieldOptions{IncludeContainerEnv: true},
+			want:    []any{map[string]any{"name": "A", "value": "1"}},
+			wantOK:  true,
+		},
+		{
+			name:   "selected args list is omitted",
+			path:   "spec.args",
+			value:  []any{"--token=secret"},
+			wantOK: false,
+		},
+		{
+			name:    "selected args list is kept when included",
+			path:    "spec.args",
+			value:   []any{"--token=secret"},
+			options: CustomFieldOptions{IncludeContainerArgs: true},
+			want:    []any{"--token=secret"},
+			wantOK:  true,
+		},
+		{
+			name:   "args that is not a list is kept",
+			path:   "spec",
+			value:  map[string]any{"args": "--verbose"},
+			want:   map[string]any{"args": "--verbose"},
+			wantOK: true,
+		},
+		{
+			name: "env and args are removed independently",
+			path: "spec.containers",
+			value: []any{
+				map[string]any{
+					"name": "main",
+					"env":  []any{map[string]any{"name": "A", "value": "1"}},
+					"args": []any{"--token=secret"},
+				},
+			},
+			options: CustomFieldOptions{IncludeContainerArgs: true},
+			want: []any{
+				map[string]any{"name": "main", "args": []any{"--token=secret"}},
+			},
+			wantOK: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := SanitizeCustomField(tt.path, tt.value, tt.includeContainerEnv)
+			got, ok := SanitizeCustomField(tt.path, tt.value, tt.options)
 			if ok != tt.wantOK {
 				t.Fatalf("SanitizeCustomField() ok = %v, want %v", ok, tt.wantOK)
 			}
@@ -172,12 +212,15 @@ func TestSanitizeCustomFieldDoesNotModifyInput(t *testing.T) {
 	container := map[string]any{
 		"name": "main",
 		"env":  []any{map[string]any{"name": "API_TOKEN", "value": "secret"}},
+		"args": []any{"--token=secret"},
 	}
 	containers := []any{container}
 
-	SanitizeCustomField("spec.containers", containers, false)
+	SanitizeCustomField("spec.containers", containers, CustomFieldOptions{})
 
-	if _, ok := container["env"]; !ok {
-		t.Fatal("SanitizeCustomField() removed env from the input object")
+	for _, field := range []string{"env", "args"} {
+		if _, ok := container[field]; !ok {
+			t.Fatalf("SanitizeCustomField() removed %s from the input object", field)
+		}
 	}
 }

@@ -27,18 +27,17 @@ type CRDHandler struct {
 	gvr          schema.GroupVersionResource
 	resourceName string
 	customFields []string // JSONPath-like field paths to extract
-	// includeContainerEnv keeps container env lists in custom fields.
-	includeContainerEnv bool
+	fieldOptions utils.CustomFieldOptions
 }
 
 // NewCRDHandler creates a new CRDHandler for a specific CRD
-func NewCRDHandler(client dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, customFields []string, includeContainerEnv bool) *CRDHandler {
+func NewCRDHandler(client dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, customFields []string, fieldOptions utils.CustomFieldOptions) *CRDHandler {
 	return &CRDHandler{
-		client:              client,
-		gvr:                 gvr,
-		resourceName:        resourceName,
-		customFields:        customFields,
-		includeContainerEnv: includeContainerEnv,
+		client:       client,
+		gvr:          gvr,
+		resourceName: resourceName,
+		customFields: customFields,
+		fieldOptions: fieldOptions,
 	}
 }
 
@@ -92,7 +91,7 @@ func (h *CRDHandler) createLogEntry(obj *unstructured.Unstructured) types.CRDDat
 		if value == nil {
 			continue
 		}
-		if value, ok := utils.SanitizeCustomField(fieldPath, value, h.includeContainerEnv); ok {
+		if value, ok := utils.SanitizeCustomField(fieldPath, value, h.fieldOptions); ok {
 			customFields[fieldPath] = value
 		}
 	}

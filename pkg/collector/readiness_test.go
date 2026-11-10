@@ -18,6 +18,7 @@ import (
 	"github.com/azure/kube-state-logs/pkg/config"
 	"github.com/azure/kube-state-logs/pkg/interfaces"
 	"github.com/azure/kube-state-logs/pkg/kubelet"
+	"github.com/azure/kube-state-logs/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -89,7 +90,7 @@ func TestRunReadinessWaitsForBuiltInCaches(t *testing.T) {
 			}
 			c.factory.Core().V1().Namespaces().Informer()
 			c.podFactory.Core().V1().Pods().Informer()
-			c.crdHandlers["widgets"] = resources.NewCRDHandler(dynamicClient, readinessTestGVR, "widgets", nil, false)
+			c.crdHandlers["widgets"] = resources.NewCRDHandler(dynamicClient, readinessTestGVR, "widgets", nil, utils.CustomFieldOptions{})
 
 			listStarted := make(chan struct{})
 			releaseList := make(chan struct{})

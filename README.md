@@ -193,6 +193,7 @@ config:
   namespaces: ""                # Empty = all namespaces
   configmapIncludeValues: false # ConfigMap data values
   crdIncludeContainerEnv: false # Container env lists in CRD custom fields
+  crdIncludeContainerArgs: false # Container args lists in CRD custom fields
   resourceConfigs:              # Per-resource settings; interval is optional
     - "pod:promote-node-labels=topology.kubernetes.io/zone"
     - "container:promote-node-labels=topology.kubernetes.io/zone"

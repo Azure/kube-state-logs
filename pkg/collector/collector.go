@@ -34,6 +34,7 @@ import (
 	"github.com/azure/kube-state-logs/pkg/config"
 	"github.com/azure/kube-state-logs/pkg/interfaces"
 	"github.com/azure/kube-state-logs/pkg/kubelet"
+	"github.com/azure/kube-state-logs/pkg/utils"
 )
 
 // Collector handles the collection and logging of Kubernetes resource state
@@ -351,7 +352,10 @@ func (c *Collector) registerCRDHandlers() {
 		}
 
 		// Create CRD handler
-		handler := resources.NewCRDHandler(c.dynClient, gvr, crdConfig.Resource, crdConfig.CustomFields, c.config.CRDIncludeContainerEnv)
+		handler := resources.NewCRDHandler(c.dynClient, gvr, crdConfig.Resource, crdConfig.CustomFields, utils.CustomFieldOptions{
+			IncludeContainerEnv:  c.config.CRDIncludeContainerEnv,
+			IncludeContainerArgs: c.config.CRDIncludeContainerArgs,
+		})
 		handlerKey := fmt.Sprintf("%s.%s", crdConfig.Resource, group)
 		c.crdHandlers[handlerKey] = handler
 

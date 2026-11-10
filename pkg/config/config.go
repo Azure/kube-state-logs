@@ -57,6 +57,9 @@ type Config struct {
 	// CRDIncludeContainerEnv controls whether container env lists, which often
 	// hold credentials, are kept in CRD custom fields. They are removed by default.
 	CRDIncludeContainerEnv bool
+	// CRDIncludeContainerArgs controls whether container args lists, which often
+	// hold credentials, are kept in CRD custom fields. They are removed by default.
+	CRDIncludeContainerArgs bool
 	// Node filters pods to only those scheduled on this specific node (by node name).
 	// Used for DaemonSet deployments where each pod logs only local pods.
 	// If empty, no node filtering is applied.

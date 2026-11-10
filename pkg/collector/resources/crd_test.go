@@ -21,6 +21,7 @@ import (
 
 	"github.com/azure/kube-state-logs/pkg/collector/testutils"
 	"github.com/azure/kube-state-logs/pkg/types"
+	"github.com/azure/kube-state-logs/pkg/utils"
 )
 
 func TestCRDHandler(t *testing.T) {
@@ -136,7 +137,7 @@ func TestCRDHandler(t *testing.T) {
 			client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 				gvr: "MyResourceList",
 			}, objects...)
-			handler := NewCRDHandler(client, gvr, "myresource", tt.customFields, false)
+			handler := NewCRDHandler(client, gvr, "myresource", tt.customFields, utils.CustomFieldOptions{})
 			if handler.HasSynced() {
 				t.Fatal("CRD cache is synced before informer setup")
 			}
@@ -233,7 +234,7 @@ func TestCRDHandler_EmptyCache(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	})
-	handler := NewCRDHandler(client, gvr, "myresource", []string{}, false)
+	handler := NewCRDHandler(client, gvr, "myresource", []string{}, utils.CustomFieldOptions{})
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -261,7 +262,7 @@ func TestCRDHandler_InvalidObject(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	})
-	handler := NewCRDHandler(client, gvr, "myresource", []string{}, false)
+	handler := NewCRDHandler(client, gvr, "myresource", []string{}, utils.CustomFieldOptions{})
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -322,7 +323,7 @@ func TestCRDHandler_CustomFields(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	}, crd)
-	handler := NewCRDHandler(client, gvr, "myresource", customFields, false)
+	handler := NewCRDHandler(client, gvr, "myresource", customFields, utils.CustomFieldOptions{})
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -397,7 +398,7 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	}, crd)
-	handler := NewCRDHandler(client, gvr, "myresource", customFields, false)
+	handler := NewCRDHandler(client, gvr, "myresource", customFields, utils.CustomFieldOptions{})
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -450,7 +451,7 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 	t.Logf("JSON output: %s", string(jsonData))
 }
 
-func TestCRDHandler_ContainerEnv(t *testing.T) {
+func TestCRDHandler_ContainerEnvAndArgs(t *testing.T) {
 	gvr := schema.GroupVersionResource{
 		Group:    "example.com",
 		Version:  "v1",
@@ -469,8 +470,9 @@ func TestCRDHandler_ContainerEnv(t *testing.T) {
 				},
 				"spec": map[string]any{
 					"env": []any{
-						map[string]any{"name": "TOP_LEVEL_TOKEN", "value": "top-level-secret"},
+						map[string]any{"name": "TOP_LEVEL_TOKEN", "value": "top-level-env-secret"},
 					},
+					"args": []any{"--token=top-level-args-secret"},
 					"template": map[string]any{
 						"spec": map[string]any{
 							"containers": []any{
@@ -478,16 +480,18 @@ func TestCRDHandler_ContainerEnv(t *testing.T) {
 									"name":  "main",
 									"image": "busybox",
 									"env": []any{
-										map[string]any{"name": "API_TOKEN", "value": "container-secret"},
+										map[string]any{"name": "API_TOKEN", "value": "container-env-secret"},
 									},
+									"args": []any{"--api-key=container-args-secret"},
 								},
 							},
 							"initContainers": []any{
 								map[string]any{
 									"name": "init",
 									"env": []any{
-										map[string]any{"name": "DB_PASSWORD", "value": "init-secret"},
+										map[string]any{"name": "DB_PASSWORD", "value": "init-env-secret"},
 									},
+									"args": []any{"--password=init-args-secret"},
 								},
 							},
 						},
@@ -499,24 +503,28 @@ func TestCRDHandler_ContainerEnv(t *testing.T) {
 
 	customFields := []string{
 		"spec.env",
+		"spec.args",
 		"spec.template",
 		"spec.template.spec.containers",
 		"spec.template.spec.initContainers",
 	}
-	envValues := []string{"top-level-secret", "container-secret", "init-secret", "API_TOKEN", "DB_PASSWORD"}
+	envValues := []string{"top-level-env-secret", "container-env-secret", "init-env-secret", "API_TOKEN", "DB_PASSWORD"}
+	argsValues := []string{"top-level-args-secret", "container-args-secret", "init-args-secret"}
 
 	for _, tt := range []struct {
-		name                string
-		includeContainerEnv bool
+		name    string
+		options utils.CustomFieldOptions
 	}{
-		{name: "env removed by default", includeContainerEnv: false},
-		{name: "env kept when included", includeContainerEnv: true},
+		{name: "env and args removed by default"},
+		{name: "env kept when included", options: utils.CustomFieldOptions{IncludeContainerEnv: true}},
+		{name: "args kept when included", options: utils.CustomFieldOptions{IncludeContainerArgs: true}},
+		{name: "env and args kept when included", options: utils.CustomFieldOptions{IncludeContainerEnv: true, IncludeContainerArgs: true}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 				gvr: "PoolList",
 			}, newPool())
-			handler := NewCRDHandler(client, gvr, "pool", customFields, tt.includeContainerEnv)
+			handler := NewCRDHandler(client, gvr, "pool", customFields, tt.options)
 			factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 			if err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour); err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
@@ -538,9 +546,17 @@ func TestCRDHandler_ContainerEnv(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to marshal CRDData: %v", err)
 			}
-			for _, value := range envValues {
-				if got := strings.Contains(string(jsonData), value); got != tt.includeContainerEnv {
-					t.Errorf("Output contains %q = %v, want %v: %s", value, got, tt.includeContainerEnv, jsonData)
+			for _, check := range []struct {
+				values []string
+				want   bool
+			}{
+				{envValues, tt.options.IncludeContainerEnv},
+				{argsValues, tt.options.IncludeContainerArgs},
+			} {
+				for _, value := range check.values {
+					if got := strings.Contains(string(jsonData), value); got != check.want {
+						t.Errorf("Output contains %q = %v, want %v: %s", value, got, check.want, jsonData)
+					}
 				}
 			}
 
@@ -548,8 +564,11 @@ func TestCRDHandler_ContainerEnv(t *testing.T) {
 			if err := json.Unmarshal(jsonData, &result); err != nil {
 				t.Fatalf("Failed to unmarshal JSON: %v", err)
 			}
-			if _, ok := result["spec.env"]; ok != tt.includeContainerEnv {
-				t.Errorf("spec.env present = %v, want %v", ok, tt.includeContainerEnv)
+			if _, ok := result["spec.env"]; ok != tt.options.IncludeContainerEnv {
+				t.Errorf("spec.env present = %v, want %v", ok, tt.options.IncludeContainerEnv)
+			}
+			if _, ok := result["spec.args"]; ok != tt.options.IncludeContainerArgs {
+				t.Errorf("spec.args present = %v, want %v", ok, tt.options.IncludeContainerArgs)
 			}
 			containers, ok := result["spec.template.spec.containers"].([]any)
 			if !ok || len(containers) != 1 {
@@ -566,8 +585,11 @@ func TestCRDHandler_ContainerEnv(t *testing.T) {
 				t.Fatalf("Failed to get cached object: exists=%v err=%v", exists, err)
 			}
 			cachedContainers, _, _ := unstructured.NestedSlice(cached.(*unstructured.Unstructured).Object, "spec", "template", "spec", "containers")
-			if _, ok := cachedContainers[0].(map[string]any)["env"]; !ok {
-				t.Error("Expected the informer cache object to keep its env")
+			cachedContainer := cachedContainers[0].(map[string]any)
+			for _, field := range []string{"env", "args"} {
+				if _, ok := cachedContainer[field]; !ok {
+					t.Errorf("Expected the informer cache object to keep its %s", field)
+				}
 			}
 		})
 	}

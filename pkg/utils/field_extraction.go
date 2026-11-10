@@ -4,6 +4,7 @@
 package utils
 
 import (
+	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -40,47 +41,63 @@ func ExtractField(obj map[string]any, path string) any {
 	return nil
 }
 
-// containerEnvField is the container field that lists environment variables.
-// Its literal values often hold credentials such as API keys and tokens.
-const containerEnvField = "env"
+// CustomFieldOptions selects which container fields are kept in CRD custom
+// fields. Container env and args lists often hold credentials such as API keys
+// and tokens, so both are removed unless included.
+type CustomFieldOptions struct {
+	// IncludeContainerEnv keeps container env lists.
+	IncludeContainerEnv bool
+	// IncludeContainerArgs keeps container args lists.
+	IncludeContainerArgs bool
+}
+
+func (o CustomFieldOptions) removedLists() []string {
+	var removed []string
+	if !o.IncludeContainerEnv {
+		removed = append(removed, "env")
+	}
+	if !o.IncludeContainerArgs {
+		removed = append(removed, "args")
+	}
+	return removed
+}
 
 // SanitizeCustomField returns a copy of a value selected by ExtractField
 // without the kubectl last-applied-configuration annotation, which holds a copy
-// of the whole spec, at any depth. Unless includeContainerEnv is set, every
-// container environment list is removed as well: a pod template or container
-// spec selected as a custom field would otherwise log each variable's literal
-// value. ok is false when the selected field is itself a removed environment
-// list. The input is not modified, so values from informer caches are safe to
-// pass.
-func SanitizeCustomField(path string, value any, includeContainerEnv bool) (result any, ok bool) {
-	removeEnv := !includeContainerEnv
+// of the whole spec, at any depth. Container env and args lists are removed as
+// well, at any depth, unless opts includes them: a pod template or container
+// spec selected as a custom field would otherwise log their literal values. ok
+// is false when the selected field is itself a removed list. The input is not
+// modified, so values from informer caches are safe to pass.
+func SanitizeCustomField(path string, value any, opts CustomFieldOptions) (result any, ok bool) {
+	removed := opts.removedLists()
 	key := path[strings.LastIndex(path, ".")+1:]
-	if removeEnv && isContainerEnv(key, value) {
+	if isRemovedList(removed, key, value) {
 		return nil, false
 	}
-	return sanitize(value, removeEnv), true
+	return sanitize(value, removed), true
 }
 
-func isContainerEnv(key string, value any) bool {
+func isRemovedList(removed []string, key string, value any) bool {
 	_, isList := value.([]any)
-	return key == containerEnvField && isList
+	return isList && slices.Contains(removed, key)
 }
 
-func sanitize(value any, removeEnv bool) any {
+func sanitize(value any, removed []string) any {
 	switch v := value.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for key, child := range v {
-			if key == corev1.LastAppliedConfigAnnotation || (removeEnv && isContainerEnv(key, child)) {
+			if key == corev1.LastAppliedConfigAnnotation || isRemovedList(removed, key, child) {
 				continue
 			}
-			out[key] = sanitize(child, removeEnv)
+			out[key] = sanitize(child, removed)
 		}
 		return out
 	case []any:
 		out := make([]any, len(v))
 		for i, child := range v {
-			out[i] = sanitize(child, removeEnv)
+			out[i] = sanitize(child, removed)
 		}
 		return out
 	default:
