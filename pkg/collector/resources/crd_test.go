@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -447,4 +448,114 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 
 	// The custom field that tried to overwrite "Name" should be ignored
 	t.Logf("JSON output: %s", string(jsonData))
+}
+
+func TestCRDHandler_RemovesContainerEnv(t *testing.T) {
+	gvr := schema.GroupVersionResource{
+		Group:    "example.com",
+		Version:  "v1",
+		Resource: "pools",
+	}
+
+	crd := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "example.com/v1",
+			"kind":       "Pool",
+			"metadata": map[string]any{
+				"name":              "test-pool",
+				"namespace":         "default",
+				"creationTimestamp": metav1.Now().Format(time.RFC3339),
+			},
+			"spec": map[string]any{
+				"env": []any{
+					map[string]any{"name": "TOP_LEVEL_TOKEN", "value": "top-level-secret"},
+				},
+				"template": map[string]any{
+					"spec": map[string]any{
+						"containers": []any{
+							map[string]any{
+								"name":  "main",
+								"image": "busybox",
+								"env": []any{
+									map[string]any{"name": "API_TOKEN", "value": "container-secret"},
+								},
+							},
+						},
+						"initContainers": []any{
+							map[string]any{
+								"name": "init",
+								"env": []any{
+									map[string]any{"name": "DB_PASSWORD", "value": "init-secret"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	customFields := []string{
+		"spec.env",
+		"spec.template",
+		"spec.template.spec.containers",
+		"spec.template.spec.initContainers",
+	}
+
+	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		gvr: "PoolList",
+	}, crd)
+	handler := NewCRDHandler(client, gvr, "pool", customFields)
+	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
+	if err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour); err != nil {
+		t.Fatalf("Failed to setup informer: %v", err)
+	}
+	factory.Start(t.Context().Done())
+	if !cache.WaitForCacheSync(t.Context().Done(), handler.informer.HasSynced) {
+		t.Fatal("Failed to sync cache")
+	}
+
+	entries, err := handler.Collect(t.Context(), []string{})
+	if err != nil {
+		t.Fatalf("Failed to collect metrics: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(entries))
+	}
+
+	jsonData, err := json.Marshal(entries[0])
+	if err != nil {
+		t.Fatalf("Failed to marshal CRDData: %v", err)
+	}
+	for _, secret := range []string{"top-level-secret", "container-secret", "init-secret", "API_TOKEN", "DB_PASSWORD"} {
+		if strings.Contains(string(jsonData), secret) {
+			t.Errorf("Expected %q to be removed from output, got %s", secret, jsonData)
+		}
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(jsonData, &result); err != nil {
+		t.Fatalf("Failed to unmarshal JSON: %v", err)
+	}
+	if _, ok := result["spec.env"]; ok {
+		t.Errorf("Expected spec.env to be omitted, got %v", result["spec.env"])
+	}
+	containers, ok := result["spec.template.spec.containers"].([]any)
+	if !ok || len(containers) != 1 {
+		t.Fatalf("Expected one container in spec.template.spec.containers, got %v", result["spec.template.spec.containers"])
+	}
+	container := containers[0].(map[string]any)
+	if container["name"] != "main" || container["image"] != "busybox" {
+		t.Errorf("Expected container name and image to be kept, got %v", container)
+	}
+
+	// The informer cache must still hold the original object.
+	cached, exists, err := handler.informer.GetStore().GetByKey("default/test-pool")
+	if err != nil || !exists {
+		t.Fatalf("Failed to get cached object: exists=%v err=%v", exists, err)
+	}
+	cachedContainers, _, _ := unstructured.NestedSlice(cached.(*unstructured.Unstructured).Object, "spec", "template", "spec", "containers")
+	if _, ok := cachedContainers[0].(map[string]any)["env"]; !ok {
+		t.Error("Expected the informer cache object to keep its env")
+	}
 }

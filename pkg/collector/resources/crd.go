@@ -85,7 +85,11 @@ func (h *CRDHandler) createLogEntry(obj *unstructured.Unstructured) types.CRDDat
 	// Extract custom fields based on JSONPath-like paths
 	customFields := make(map[string]any)
 	for _, fieldPath := range h.customFields {
-		if value := h.extractField(obj.Object, fieldPath); value != nil {
+		value := h.extractField(obj.Object, fieldPath)
+		if value == nil {
+			continue
+		}
+		if value, ok := utils.RemoveContainerEnv(fieldPath, value); ok {
 			customFields[fieldPath] = value
 		}
 	}
