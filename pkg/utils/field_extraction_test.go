@@ -8,13 +8,14 @@ import (
 	"testing"
 )
 
-func TestRemoveContainerEnv(t *testing.T) {
+func TestSanitizeCustomField(t *testing.T) {
 	tests := []struct {
-		name   string
-		path   string
-		value  any
-		want   any
-		wantOK bool
+		name                string
+		path                string
+		value               any
+		includeContainerEnv bool
+		want                any
+		wantOK              bool
 	}{
 		{
 			name:   "scalar is unchanged",
@@ -118,31 +119,65 @@ func TestRemoveContainerEnv(t *testing.T) {
 			want:   "production",
 			wantOK: true,
 		},
+		{
+			name: "included env is kept while last-applied-configuration is removed",
+			path: "spec.template",
+			value: map[string]any{
+				"metadata": map[string]any{
+					"annotations": map[string]any{
+						"kubectl.kubernetes.io/last-applied-configuration": "{}",
+					},
+				},
+				"spec": map[string]any{
+					"containers": []any{
+						map[string]any{"name": "main", "env": []any{map[string]any{"name": "A", "value": "1"}}},
+					},
+				},
+			},
+			includeContainerEnv: true,
+			want: map[string]any{
+				"metadata": map[string]any{"annotations": map[string]any{}},
+				"spec": map[string]any{
+					"containers": []any{
+						map[string]any{"name": "main", "env": []any{map[string]any{"name": "A", "value": "1"}}},
+					},
+				},
+			},
+			wantOK: true,
+		},
+		{
+			name:                "selected env list is kept when included",
+			path:                "spec.env",
+			value:               []any{map[string]any{"name": "A", "value": "1"}},
+			includeContainerEnv: true,
+			want:                []any{map[string]any{"name": "A", "value": "1"}},
+			wantOK:              true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := RemoveContainerEnv(tt.path, tt.value)
+			got, ok := SanitizeCustomField(tt.path, tt.value, tt.includeContainerEnv)
 			if ok != tt.wantOK {
-				t.Fatalf("RemoveContainerEnv() ok = %v, want %v", ok, tt.wantOK)
+				t.Fatalf("SanitizeCustomField() ok = %v, want %v", ok, tt.wantOK)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("RemoveContainerEnv() = %#v, want %#v", got, tt.want)
+				t.Errorf("SanitizeCustomField() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestRemoveContainerEnvDoesNotModifyInput(t *testing.T) {
+func TestSanitizeCustomFieldDoesNotModifyInput(t *testing.T) {
 	container := map[string]any{
 		"name": "main",
 		"env":  []any{map[string]any{"name": "API_TOKEN", "value": "secret"}},
 	}
 	containers := []any{container}
 
-	RemoveContainerEnv("spec.containers", containers)
+	SanitizeCustomField("spec.containers", containers, false)
 
 	if _, ok := container["env"]; !ok {
-		t.Fatal("RemoveContainerEnv() removed env from the input object")
+		t.Fatal("SanitizeCustomField() removed env from the input object")
 	}
 }

@@ -140,6 +140,9 @@ spec:
             {{- if .Values.config.configmapIncludeValues }}
             - --configmap-include-values={{ .Values.config.configmapIncludeValues }}
             {{- end }}
+            {{- if .Values.config.crdIncludeContainerEnv }}
+            - --crd-include-container-env={{ .Values.config.crdIncludeContainerEnv }}
+            {{- end }}
             {{- if .Values.deployment.leaderElection.enabled }}
             - --leader-elect
             - --leader-election-lease-name={{ default (ternary (printf "%s-cluster" (include "kube-state-logs.fullname" .)) (include "kube-state-logs.fullname" .) (eq .Values.deploymentMode "advanced")) .Values.deployment.leaderElection.leaseName }}

@@ -165,15 +165,18 @@ config:
         - "status.lastTokenRefreshTime"
 ```
 
-Custom fields never include container environment variables. Any `env` list
-in a selected value is removed, at any depth, and a selected field that is
-itself an `env` list is omitted. Selecting a pod template or a container list,
-such as `spec.template.spec.containers`, therefore logs the containers without
-their `env`, because literal environment values often hold credentials. The
-`kubectl.kubernetes.io/last-applied-configuration` annotation, which holds a
-copy of the spec, is also removed from selected values. Other container fields,
-including `envFrom` references, are kept. To log specific variables of running
-containers, use the `container` resource's `containerEnvVars` allowlist.
+By default, custom fields do not include container environment variables. Any
+`env` list in a selected value is removed, at any depth, and a selected field
+that is itself an `env` list is omitted. Selecting a pod template or a container
+list, such as `spec.template.spec.containers`, therefore logs the containers
+without their `env`, because literal environment values often hold credentials.
+Other container fields, including `envFrom` references, are kept. To keep the
+`env` lists, set `crdIncludeContainerEnv: true`; this applies to every
+configured CRD. To log specific variables of running containers instead, use
+the `container` resource's `containerEnvVars` allowlist.
+
+The `kubectl.kubernetes.io/last-applied-configuration` annotation, which holds a
+copy of the spec, is always removed from selected values.
 
 ## Resource Notes
 

@@ -351,7 +351,7 @@ func (c *Collector) registerCRDHandlers() {
 		}
 
 		// Create CRD handler
-		handler := resources.NewCRDHandler(c.dynClient, gvr, crdConfig.Resource, crdConfig.CustomFields)
+		handler := resources.NewCRDHandler(c.dynClient, gvr, crdConfig.Resource, crdConfig.CustomFields, c.config.CRDIncludeContainerEnv)
 		handlerKey := fmt.Sprintf("%s.%s", crdConfig.Resource, group)
 		c.crdHandlers[handlerKey] = handler
 
