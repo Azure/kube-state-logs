@@ -33,9 +33,9 @@ func main() {
 		kubeconfig           = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
 		containerEnvVars     = flag.String("container-envvars", "", "Comma-separated list of environment variable names to capture from containers (e.g., 'GOMAXPROCS,MY_FLAG'). Empty disables capturing.")
 		configMapValues      = flag.Bool("configmap-include-values", false, "Include ConfigMap data values (data only, no binary data)")
-		crdContainerEnv      = flag.Bool("crd-include-container-env", false, "Keep container env lists, whose values often hold credentials, in CRD custom fields")
-		crdContainerArgs     = flag.Bool("crd-include-container-args", false, "Keep container args lists, which often hold credentials, in CRD custom fields")
-		crdContainerCommand  = flag.Bool("crd-include-container-command", false, "Keep container command lists, which often hold credentials, in CRD custom fields")
+		crdDropEnv           = flag.Bool("crd-drop-container-env", false, "Drop container env lists, whose values can hold credentials, from CRD custom fields")
+		crdDropArgs          = flag.Bool("crd-drop-container-args", false, "Drop container args lists, which can hold credentials, from CRD custom fields")
+		crdDropCommand       = flag.Bool("crd-drop-container-command", false, "Drop container command lists, which can hold credentials, from CRD custom fields")
 		node                 = flag.String("node", "", "Filter pods to only those scheduled on this node (used for DaemonSet deployment mode)")
 		trackUnscheduledPods = flag.Bool("track-unscheduled-pods", false, "Only collect pods that have not yet been scheduled to a node (used with advanced deployment mode)")
 		useKubeletAPI        = flag.Bool("use-kubelet-api", false, "Use kubelet API instead of Kubernetes API for pod/container collection (requires --node and --node-ip)")
@@ -94,9 +94,9 @@ func main() {
 		Kubeconfig:                   *kubeconfig,
 		ContainerEnvVars:             config.ParseContainerEnvVars(*containerEnvVars),
 		ConfigMapIncludeValues:       *configMapValues,
-		CRDIncludeContainerEnv:       *crdContainerEnv,
-		CRDIncludeContainerArgs:      *crdContainerArgs,
-		CRDIncludeContainerCommand:   *crdContainerCommand,
+		CRDDropContainerEnv:          *crdDropEnv,
+		CRDDropContainerArgs:         *crdDropArgs,
+		CRDDropContainerCommand:      *crdDropCommand,
 		Node:                         *node,
 		TrackUnscheduledPods:         *trackUnscheduledPods,
 		UseKubeletAPI:                *useKubeletAPI,

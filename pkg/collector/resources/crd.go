@@ -31,7 +31,13 @@ type CRDHandler struct {
 }
 
 // NewCRDHandler creates a new CRDHandler for a specific CRD
-func NewCRDHandler(client dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, customFields []string, fieldOptions utils.CustomFieldOptions) *CRDHandler {
+func NewCRDHandler(client dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, customFields []string) *CRDHandler {
+	return NewCRDHandlerWithOptions(client, gvr, resourceName, customFields, utils.CustomFieldOptions{})
+}
+
+// NewCRDHandlerWithOptions creates a new CRDHandler for a specific CRD that
+// drops the container fields selected by fieldOptions from its custom fields.
+func NewCRDHandlerWithOptions(client dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, customFields []string, fieldOptions utils.CustomFieldOptions) *CRDHandler {
 	return &CRDHandler{
 		client:       client,
 		gvr:          gvr,
@@ -91,7 +97,7 @@ func (h *CRDHandler) createLogEntry(obj *unstructured.Unstructured) types.CRDDat
 		if value == nil {
 			continue
 		}
-		if value, ok := utils.SanitizeCustomField(fieldPath, value, h.fieldOptions); ok {
+		if value, ok := utils.DropContainerFields(fieldPath, value, h.fieldOptions); ok {
 			customFields[fieldPath] = value
 		}
 	}

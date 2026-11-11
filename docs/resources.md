@@ -165,20 +165,26 @@ config:
         - "status.lastTokenRefreshTime"
 ```
 
-By default, custom fields do not include container environment variables,
-arguments or commands. Any `env`, `args` or `command` list in a selected value
-is removed, at any depth, and a selected field that is itself such a list is
-omitted. Selecting a pod template or a container list, such as
-`spec.template.spec.containers`, therefore logs the containers without their
-`env`, `args` and `command`, because these often hold credentials. Other
-container fields, including `image`, `resources` and `envFrom` references, are
-kept. To keep a list, set `crdIncludeContainerEnv`, `crdIncludeContainerArgs`
-or `crdIncludeContainerCommand` to `true`; each applies to every configured CRD.
-These settings are separate from `containerEnvVars`, which selects variables
-to log from running containers in `container` snapshots.
+A custom field logs everything at its path. Selecting a pod template or a
+container list, such as `spec.template.spec.containers`, therefore logs each
+container's `env`, `args` and `command`, which can hold credentials such as API
+keys and tokens. To drop them, set `crdDropContainerEnv`, `crdDropContainerArgs`
+or `crdDropContainerCommand` to `true`:
 
-The `kubectl.kubernetes.io/last-applied-configuration` annotation, which holds a
-copy of the spec, is always removed from selected values.
+```yaml
+config:
+  crdDropContainerEnv: true
+  crdDropContainerArgs: true
+  crdDropContainerCommand: true
+```
+
+Each setting is off by default and applies to every configured CRD. When it is
+on, every list with that name in a selected value is removed, at any depth, and
+a selected field that is itself such a list is omitted. The match is by field
+name, so a list with the same name outside a container is dropped too. Other
+container fields, including `image`, `resources` and `envFrom` references, are
+kept. These settings are separate from `containerEnvVars`, which selects
+variables to log from running containers in `container` snapshots.
 
 ## Resource Notes
 

@@ -54,14 +54,14 @@ type Config struct {
 	ContainerEnvVars []string
 	// ConfigMapIncludeValues controls whether ConfigMap data values are logged.
 	ConfigMapIncludeValues bool
-	// CRDIncludeContainerEnv, CRDIncludeContainerArgs and CRDIncludeContainerCommand
-	// control whether container env, args and command lists, which often hold
-	// credentials, are kept in CRD custom fields, such as a pod template embedded
-	// in a CRD. Each is removed by default. They don't affect ContainerEnvVars,
-	// which selects variables for container snapshots.
-	CRDIncludeContainerEnv     bool
-	CRDIncludeContainerArgs    bool
-	CRDIncludeContainerCommand bool
+	// CRDDropContainerEnv, CRDDropContainerArgs and CRDDropContainerCommand
+	// drop container env, args and command lists, which can hold credentials,
+	// from CRD custom fields, such as a pod template embedded in a CRD. Each is
+	// off by default, so the lists are collected. They don't affect
+	// ContainerEnvVars, which selects variables for container snapshots.
+	CRDDropContainerEnv     bool
+	CRDDropContainerArgs    bool
+	CRDDropContainerCommand bool
 	// Node filters pods to only those scheduled on this specific node (by node name).
 	// Used for DaemonSet deployments where each pod logs only local pods.
 	// If empty, no node filtering is applied.

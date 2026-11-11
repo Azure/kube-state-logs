@@ -137,7 +137,7 @@ func TestCRDHandler(t *testing.T) {
 			client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 				gvr: "MyResourceList",
 			}, objects...)
-			handler := NewCRDHandler(client, gvr, "myresource", tt.customFields, utils.CustomFieldOptions{})
+			handler := NewCRDHandler(client, gvr, "myresource", tt.customFields)
 			if handler.HasSynced() {
 				t.Fatal("CRD cache is synced before informer setup")
 			}
@@ -234,7 +234,7 @@ func TestCRDHandler_EmptyCache(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	})
-	handler := NewCRDHandler(client, gvr, "myresource", []string{}, utils.CustomFieldOptions{})
+	handler := NewCRDHandler(client, gvr, "myresource", []string{})
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -262,7 +262,7 @@ func TestCRDHandler_InvalidObject(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	})
-	handler := NewCRDHandler(client, gvr, "myresource", []string{}, utils.CustomFieldOptions{})
+	handler := NewCRDHandler(client, gvr, "myresource", []string{})
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -323,7 +323,7 @@ func TestCRDHandler_CustomFields(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	}, crd)
-	handler := NewCRDHandler(client, gvr, "myresource", customFields, utils.CustomFieldOptions{})
+	handler := NewCRDHandler(client, gvr, "myresource", customFields)
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -398,7 +398,7 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	}, crd)
-	handler := NewCRDHandler(client, gvr, "myresource", customFields, utils.CustomFieldOptions{})
+	handler := NewCRDHandler(client, gvr, "myresource", customFields)
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -520,17 +520,17 @@ func TestCRDHandler_ContainerEnvArgsAndCommand(t *testing.T) {
 		name    string
 		options utils.CustomFieldOptions
 	}{
-		{name: "env, args and command removed by default"},
-		{name: "env kept when included", options: utils.CustomFieldOptions{IncludeContainerEnv: true}},
-		{name: "args kept when included", options: utils.CustomFieldOptions{IncludeContainerArgs: true}},
-		{name: "command kept when included", options: utils.CustomFieldOptions{IncludeContainerCommand: true}},
-		{name: "all kept when included", options: utils.CustomFieldOptions{IncludeContainerEnv: true, IncludeContainerArgs: true, IncludeContainerCommand: true}},
+		{name: "env, args and command collected by default"},
+		{name: "env dropped", options: utils.CustomFieldOptions{DropContainerEnv: true}},
+		{name: "args dropped", options: utils.CustomFieldOptions{DropContainerArgs: true}},
+		{name: "command dropped", options: utils.CustomFieldOptions{DropContainerCommand: true}},
+		{name: "all dropped", options: utils.CustomFieldOptions{DropContainerEnv: true, DropContainerArgs: true, DropContainerCommand: true}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 				gvr: "PoolList",
 			}, newPool())
-			handler := NewCRDHandler(client, gvr, "pool", customFields, tt.options)
+			handler := NewCRDHandlerWithOptions(client, gvr, "pool", customFields, tt.options)
 			factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 			if err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour); err != nil {
 				t.Fatalf("Failed to setup informer: %v", err)
@@ -556,9 +556,9 @@ func TestCRDHandler_ContainerEnvArgsAndCommand(t *testing.T) {
 				values []string
 				want   bool
 			}{
-				{envValues, tt.options.IncludeContainerEnv},
-				{argsValues, tt.options.IncludeContainerArgs},
-				{commandValues, tt.options.IncludeContainerCommand},
+				{envValues, !tt.options.DropContainerEnv},
+				{argsValues, !tt.options.DropContainerArgs},
+				{commandValues, !tt.options.DropContainerCommand},
 			} {
 				for _, value := range check.values {
 					if got := strings.Contains(string(jsonData), value); got != check.want {
@@ -571,14 +571,14 @@ func TestCRDHandler_ContainerEnvArgsAndCommand(t *testing.T) {
 			if err := json.Unmarshal(jsonData, &result); err != nil {
 				t.Fatalf("Failed to unmarshal JSON: %v", err)
 			}
-			if _, ok := result["spec.env"]; ok != tt.options.IncludeContainerEnv {
-				t.Errorf("spec.env present = %v, want %v", ok, tt.options.IncludeContainerEnv)
+			if _, ok := result["spec.env"]; ok != !tt.options.DropContainerEnv {
+				t.Errorf("spec.env present = %v, want %v", ok, !tt.options.DropContainerEnv)
 			}
-			if _, ok := result["spec.args"]; ok != tt.options.IncludeContainerArgs {
-				t.Errorf("spec.args present = %v, want %v", ok, tt.options.IncludeContainerArgs)
+			if _, ok := result["spec.args"]; ok != !tt.options.DropContainerArgs {
+				t.Errorf("spec.args present = %v, want %v", ok, !tt.options.DropContainerArgs)
 			}
-			if _, ok := result["spec.command"]; ok != tt.options.IncludeContainerCommand {
-				t.Errorf("spec.command present = %v, want %v", ok, tt.options.IncludeContainerCommand)
+			if _, ok := result["spec.command"]; ok != !tt.options.DropContainerCommand {
+				t.Errorf("spec.command present = %v, want %v", ok, !tt.options.DropContainerCommand)
 			}
 			containers, ok := result["spec.template.spec.containers"].([]any)
 			if !ok || len(containers) != 1 {

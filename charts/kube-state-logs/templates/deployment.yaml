@@ -140,14 +140,14 @@ spec:
             {{- if .Values.config.configmapIncludeValues }}
             - --configmap-include-values={{ .Values.config.configmapIncludeValues }}
             {{- end }}
-            {{- if .Values.config.crdIncludeContainerEnv }}
-            - --crd-include-container-env={{ .Values.config.crdIncludeContainerEnv }}
+            {{- if .Values.config.crdDropContainerEnv }}
+            - --crd-drop-container-env={{ .Values.config.crdDropContainerEnv }}
             {{- end }}
-            {{- if .Values.config.crdIncludeContainerArgs }}
-            - --crd-include-container-args={{ .Values.config.crdIncludeContainerArgs }}
+            {{- if .Values.config.crdDropContainerArgs }}
+            - --crd-drop-container-args={{ .Values.config.crdDropContainerArgs }}
             {{- end }}
-            {{- if .Values.config.crdIncludeContainerCommand }}
-            - --crd-include-container-command={{ .Values.config.crdIncludeContainerCommand }}
+            {{- if .Values.config.crdDropContainerCommand }}
+            - --crd-drop-container-command={{ .Values.config.crdDropContainerCommand }}
             {{- end }}
             {{- if .Values.deployment.leaderElection.enabled }}
             - --leader-elect

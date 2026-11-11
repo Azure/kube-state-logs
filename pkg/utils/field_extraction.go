@@ -6,8 +6,6 @@ package utils
 import (
 	"slices"
 	"strings"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 // ExtractField extracts a field from an object using a dot-separated path
@@ -41,68 +39,71 @@ func ExtractField(obj map[string]any, path string) any {
 	return nil
 }
 
-// CustomFieldOptions selects which container fields are kept in CRD custom
-// fields. Container env, args and command lists often hold credentials such as
-// API keys and tokens, so each is removed unless included.
+// CustomFieldOptions selects container fields to drop from CRD custom fields.
+// Container env, args and command lists can hold credentials such as API keys
+// and tokens. The zero value drops nothing.
 type CustomFieldOptions struct {
-	// IncludeContainerEnv keeps container env lists.
-	IncludeContainerEnv bool
-	// IncludeContainerArgs keeps container args lists.
-	IncludeContainerArgs bool
-	// IncludeContainerCommand keeps container command lists.
-	IncludeContainerCommand bool
+	// DropContainerEnv drops container env lists.
+	DropContainerEnv bool
+	// DropContainerArgs drops container args lists.
+	DropContainerArgs bool
+	// DropContainerCommand drops container command lists.
+	DropContainerCommand bool
 }
 
-func (o CustomFieldOptions) removedLists() []string {
-	var removed []string
-	if !o.IncludeContainerEnv {
-		removed = append(removed, "env")
+func (o CustomFieldOptions) droppedLists() []string {
+	var dropped []string
+	if o.DropContainerEnv {
+		dropped = append(dropped, "env")
 	}
-	if !o.IncludeContainerArgs {
-		removed = append(removed, "args")
+	if o.DropContainerArgs {
+		dropped = append(dropped, "args")
 	}
-	if !o.IncludeContainerCommand {
-		removed = append(removed, "command")
+	if o.DropContainerCommand {
+		dropped = append(dropped, "command")
 	}
-	return removed
+	return dropped
 }
 
-// SanitizeCustomField returns a copy of a value selected by ExtractField
-// without the kubectl last-applied-configuration annotation, which holds a copy
-// of the whole spec, at any depth. Container env, args and command lists are
-// removed as well, at any depth, unless opts includes them: a pod template or container
-// spec selected as a custom field would otherwise log their literal values. ok
-// is false when the selected field is itself a removed list. The input is not
-// modified, so values from informer caches are safe to pass.
-func SanitizeCustomField(path string, value any, opts CustomFieldOptions) (result any, ok bool) {
-	removed := opts.removedLists()
+// DropContainerFields returns a value selected by ExtractField without the
+// container env, args or command lists that opts drops, at any depth. A pod
+// template or container spec selected as a custom field otherwise logs their
+// literal values. ok is false when the selected field is itself a dropped list.
+// When opts drops nothing, the value is returned unchanged. Otherwise a copy is
+// returned and the input is not modified, so values from informer caches are
+// safe to pass.
+func DropContainerFields(path string, value any, opts CustomFieldOptions) (result any, ok bool) {
+	dropped := opts.droppedLists()
+	if len(dropped) == 0 {
+		return value, true
+	}
 	key := path[strings.LastIndex(path, ".")+1:]
-	if isRemovedList(removed, key, value) {
+	if isDroppedList(dropped, key, value) {
 		return nil, false
 	}
-	return sanitize(value, removed), true
+	return withoutLists(value, dropped), true
 }
 
-func isRemovedList(removed []string, key string, value any) bool {
+func isDroppedList(dropped []string, key string, value any) bool {
 	_, isList := value.([]any)
-	return isList && slices.Contains(removed, key)
+	return isList && slices.Contains(dropped, key)
 }
 
-func sanitize(value any, removed []string) any {
+func withoutLists(value any, dropped []string) any {
 	switch v := value.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for key, child := range v {
-			if key == corev1.LastAppliedConfigAnnotation || isRemovedList(removed, key, child) {
+			if isDroppedList(dropped, key, child) {
 				continue
 			}
-			out[key] = sanitize(child, removed)
+			out[key] = withoutLists(child, dropped)
 		}
 		return out
 	case []any:
 		out := make([]any, len(v))
 		for i, child := range v {
-			out[i] = sanitize(child, removed)
+			out[i] = withoutLists(child, dropped)
 		}
 		return out
 	default:

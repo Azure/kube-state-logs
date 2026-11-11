@@ -54,11 +54,11 @@ config:
     - "GOMAXPROCS"
   # Optional: include ConfigMap data values.
   configmapIncludeValues: false
-  # Optional: keep container env, args or command lists in CRD custom fields.
-  # Their values often hold credentials, so they are removed by default.
-  crdIncludeContainerEnv: false
-  crdIncludeContainerArgs: false
-  crdIncludeContainerCommand: false
+  # Optional: drop container env, args or command lists, which can hold
+  # credentials, from CRD custom fields.
+  crdDropContainerEnv: false
+  crdDropContainerArgs: false
+  crdDropContainerCommand: false
 
 # Resource limits for deployment (simple mode) or cluster deployment (advanced mode)
 resources:
