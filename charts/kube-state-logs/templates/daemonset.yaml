@@ -12,9 +12,13 @@ spec:
       {{- include "kube-state-logs.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: node
   updateStrategy:
-    type: RollingUpdate
+    type: {{ .Values.daemonset.updateStrategy.type }}
+    {{- if eq .Values.daemonset.updateStrategy.type "RollingUpdate" }}
+    {{- with .Values.daemonset.updateStrategy.rollingUpdate }}
     rollingUpdate:
-      maxUnavailable: 1
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- end }}
   template:
     metadata:
       labels:

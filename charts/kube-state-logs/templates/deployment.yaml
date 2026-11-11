@@ -24,10 +24,13 @@ spec:
       app.kubernetes.io/component: cluster
       {{- end }}
   strategy:
-    type: RollingUpdate
+    type: {{ .Values.deployment.strategy.type }}
+    {{- if eq .Values.deployment.strategy.type "RollingUpdate" }}
+    {{- with .Values.deployment.strategy.rollingUpdate }}
     rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- end }}
   template:
     metadata:
       labels:
