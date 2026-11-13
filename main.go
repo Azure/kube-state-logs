@@ -27,7 +27,7 @@ func main() {
 		logInterval          = flag.Duration("log-interval", 1*time.Minute, "Default interval between log outputs")
 		resources            = flag.String("resources", config.DefaultResourceList, "Comma-separated list of resources to monitor")
 		resourceConfigs      = flag.String("resource-configs", "", "Comma-separated list of resource configs: 'resource:interval[:labels=...][:fields=...][:promote-node-labels=label|label]'. Use '\\\\,' to escape commas in selectors (e.g., 'configmap:1m:labels=app=foo\\\\,env=prod'). If not specified, uses log-interval for all resources.")
-		crdConfigs           = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (format apiVersion:resource[:customFields[:dropFields]] with '|'-separated fields; dropFields are path patterns supporting '*' and '**' (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
+		crdConfigs           = flag.String("crd-configs", "", "Comma-separated list of CRD configurations in the format 'apiVersion:resource[:customFields[:dropFields]]', where customFields and dropFields are '|'-separated. dropFields are dot-separated path patterns whose segments are globs ('*', '?', '[...]', '\\' escapes) or '**' for any depth (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|status.tokenExpirationTime:**.token')")
 		namespaces           = flag.String("namespaces", "", "Comma-separated list of namespaces to monitor (empty for all)")
 		logLevel             = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 		kubeconfig           = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
