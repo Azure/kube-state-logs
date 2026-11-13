@@ -217,6 +217,16 @@ jobs:
             > /tmp/kube-state-logs-crd-no-fields.yaml
           grep -q -- '- "--crd-configs=example.com/v1:widgets:"' /tmp/kube-state-logs-crd-no-fields.yaml
 
+          helm template crd-drop-fields "$chart" \
+            --set 'config.resources={crd}' \
+            --set-string 'config.crdConfigs[0].apiVersion=example.com/v1' \
+            --set-string 'config.crdConfigs[0].resource=widgets' \
+            --set-string 'config.crdConfigs[0].customFields[0]=spec.template' \
+            --set-string 'config.crdConfigs[0].dropFields[0]=spec.template.spec.containers.env' \
+            --set-string 'config.crdConfigs[0].dropFields[1]=**.password' \
+            > /tmp/kube-state-logs-crd-drop-fields.yaml
+          grep -q -- '- "--crd-configs=example.com/v1:widgets:spec.template:spec.template.spec.containers.env|\*\*.password"' /tmp/kube-state-logs-crd-drop-fields.yaml
+
           helm template cluster-only "$chart" \
             --set deploymentMode=advanced \
             --set 'config.resources={deployment,node}' \
@@ -236,6 +246,9 @@ jobs:
         run: |
           GOBIN="$RUNNER_TEMP/bin" go install github.com/mikefarah/yq/v4@v4.45.1
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Test Helm CRD pattern escaping
+        run: bash .github/scripts/crd-patterns_test.sh
 
       - name: Test chart publishing
         run: bash .github/scripts/publishing_test.sh

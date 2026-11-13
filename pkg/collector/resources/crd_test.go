@@ -6,7 +6,10 @@ package resources
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +23,7 @@ import (
 
 	"github.com/azure/kube-state-logs/pkg/collector/testutils"
 	"github.com/azure/kube-state-logs/pkg/types"
+	"github.com/azure/kube-state-logs/pkg/utils"
 )
 
 func TestCRDHandler(t *testing.T) {
@@ -135,7 +139,7 @@ func TestCRDHandler(t *testing.T) {
 			client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 				gvr: "MyResourceList",
 			}, objects...)
-			handler := NewCRDHandler(client, gvr, "myresource", tt.customFields)
+			handler := NewCRDHandler(client, gvr, "myresource", tt.customFields, nil)
 			if handler.HasSynced() {
 				t.Fatal("CRD cache is synced before informer setup")
 			}
@@ -232,7 +236,7 @@ func TestCRDHandler_EmptyCache(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	})
-	handler := NewCRDHandler(client, gvr, "myresource", []string{})
+	handler := NewCRDHandler(client, gvr, "myresource", []string{}, nil)
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -260,7 +264,7 @@ func TestCRDHandler_InvalidObject(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	})
-	handler := NewCRDHandler(client, gvr, "myresource", []string{})
+	handler := NewCRDHandler(client, gvr, "myresource", []string{}, nil)
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -321,7 +325,7 @@ func TestCRDHandler_CustomFields(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	}, crd)
-	handler := NewCRDHandler(client, gvr, "myresource", customFields)
+	handler := NewCRDHandler(client, gvr, "myresource", customFields, nil)
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -396,7 +400,7 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		gvr: "MyResourceList",
 	}, crd)
-	handler := NewCRDHandler(client, gvr, "myresource", customFields)
+	handler := NewCRDHandler(client, gvr, "myresource", customFields, nil)
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
 	err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour)
 	if err != nil {
@@ -447,4 +451,114 @@ func TestCRDHandler_CustomFieldsNoCollision(t *testing.T) {
 
 	// The custom field that tried to overwrite "Name" should be ignored
 	t.Logf("JSON output: %s", string(jsonData))
+}
+
+func TestCRDHandler_DropFields(t *testing.T) {
+	gvr := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "workloads"}
+	newWorkload := func() *unstructured.Unstructured {
+		return &unstructured.Unstructured{
+			Object: map[string]any{
+				"apiVersion": "example.com/v1",
+				"kind":       "Workload",
+				"metadata": map[string]any{
+					"name":              "test-workload",
+					"namespace":         "default",
+					"creationTimestamp": metav1.Now().Format(time.RFC3339),
+				},
+				"spec": map[string]any{
+					"password": "top-secret",
+					"template": map[string]any{
+						"spec": map[string]any{
+							"containers": []any{
+								map[string]any{
+									"name":  "main",
+									"image": "busybox",
+									"env":   []any{map[string]any{"name": "TOKEN", "value": "env-secret"}},
+									"args":  []any{"--key=args-secret"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	customFields := []string{"spec.password", "spec.template", "spec.template.spec.containers"}
+
+	tests := []struct {
+		name       string
+		dropFields []string
+		wantFields []string
+		wantAbsent []string
+		wantKeys   []string
+	}{
+		{
+			name:       "no drop fields keeps everything",
+			wantFields: []string{"top-secret", "env-secret", "args-secret", "busybox"},
+			wantKeys:   customFields,
+		},
+		{
+			name:       "drop nested and recursive fields",
+			dropFields: []string{"spec.template.spec.containers.env", "**.args", "**.password"},
+			wantFields: []string{"busybox"},
+			wantAbsent: []string{"top-secret", "env-secret", "args-secret"},
+			wantKeys:   []string{"spec.template", "spec.template.spec.containers"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns, err := utils.ParseFieldPatterns(tt.dropFields)
+			if err != nil {
+				t.Fatalf("ParseFieldPatterns: %v", err)
+			}
+			obj := newWorkload()
+			client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+				gvr: "WorkloadList",
+			}, obj)
+			handler := NewCRDHandler(client, gvr, "workload", customFields, patterns)
+			factory := dynamicinformer.NewDynamicSharedInformerFactory(client, time.Hour)
+			if err := handler.SetupInformer(factory, &testutils.MockLogger{}, time.Hour); err != nil {
+				t.Fatalf("Failed to setup informer: %v", err)
+			}
+			factory.Start(t.Context().Done())
+			if !cache.WaitForCacheSync(t.Context().Done(), handler.informer.HasSynced) {
+				t.Fatal("Failed to sync cache")
+			}
+
+			entries, err := handler.Collect(t.Context(), []string{})
+			if err != nil {
+				t.Fatalf("Failed to collect: %v", err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("Expected 1 entry, got %d", len(entries))
+			}
+			crdData := entries[0].(types.CRDData)
+			gotKeys := slices.Sorted(maps.Keys(crdData.CustomFields))
+			if want := slices.Sorted(slices.Values(tt.wantKeys)); !slices.Equal(gotKeys, want) {
+				t.Errorf("custom field keys = %v, want %v", gotKeys, want)
+			}
+
+			jsonData, err := json.Marshal(crdData)
+			if err != nil {
+				t.Fatalf("Failed to marshal CRDData: %v", err)
+			}
+			for _, s := range tt.wantFields {
+				if !strings.Contains(string(jsonData), s) {
+					t.Errorf("expected %q in output: %s", s, jsonData)
+				}
+			}
+			for _, s := range tt.wantAbsent {
+				if strings.Contains(string(jsonData), s) {
+					t.Errorf("unexpected %q in output: %s", s, jsonData)
+				}
+			}
+
+			// Informer cache objects must not be modified by filtering.
+			cached := utils.SafeGetStoreList(handler.informer)[0].(*unstructured.Unstructured)
+			if !strings.Contains(fmt.Sprint(cached.Object), "env-secret") {
+				t.Error("informer cache object was modified")
+			}
+		})
+	}
 }

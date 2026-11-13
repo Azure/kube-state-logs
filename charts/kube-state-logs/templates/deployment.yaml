@@ -126,9 +126,21 @@ spec:
             {{- if .customFields }}
             {{- $customFieldsStr = (.customFields | join "|") }}
             {{- end }}
-            {{- $crdArgs = append $crdArgs (printf "%s:%s:%s" .apiVersion .resource $customFieldsStr) }}
+            {{- $crdArg := printf "%s:%s:%s" .apiVersion .resource $customFieldsStr }}
+            {{- if .dropFields }}
+            {{- range .dropFields }}
+            {{- if not (trim (toString .)) }}
+            {{- fail "config.crdConfigs dropFields entries cannot be empty" }}
             {{- end }}
-            - "--crd-configs={{ $crdArgs | join "," }}"
+            {{- if regexMatch "[,:|]" . }}
+            {{- fail (printf "config.crdConfigs dropFields entry %q cannot contain ',', ':' or '|'" .) }}
+            {{- end }}
+            {{- end }}
+            {{- $crdArg = printf "%s:%s" $crdArg (.dropFields | join "|") }}
+            {{- end }}
+            {{- $crdArgs = append $crdArgs $crdArg }}
+            {{- end }}
+            - {{ printf "--crd-configs=%s" ($crdArgs | join ",") | quote }}
             {{- end }}
             {{- if .Values.config.namespaces }}
             - --namespaces={{ .Values.config.namespaces }}
