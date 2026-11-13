@@ -264,6 +264,33 @@ func TestDropMatchingFields(t *testing.T) {
 	}
 }
 
+func TestDropMatchingFieldsMatchesAnyTypeAndMetadata(t *testing.T) {
+	tests := []struct {
+		name      string
+		pattern   string
+		fieldPath string
+		value     any
+		want      any
+	}{
+		{"leading recursive drops label", "**.env", "metadata.labels", map[string]any{"env": "prod", "app": "web"}, map[string]any{"app": "web"}},
+		{"anchored recursive keeps label", "spec.**.env", "metadata.labels", map[string]any{"env": "prod", "app": "web"}, map[string]any{"env": "prod", "app": "web"}},
+		{"scalar is dropped", "spec.**.env", "spec", map[string]any{"env": "staging", "replicas": int64(1)}, map[string]any{"replicas": int64(1)}},
+		{"object is dropped", "spec.**.env", "spec", map[string]any{"env": map[string]any{"a": "b"}, "replicas": int64(1)}, map[string]any{"replicas": int64(1)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns, err := ParseFieldPatterns([]string{tt.pattern})
+			if err != nil {
+				t.Fatalf("ParseFieldPatterns: %v", err)
+			}
+			got, keep := DropMatchingFields(tt.fieldPath, tt.value, patterns)
+			if !keep || !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DropMatchingFields(%q) = %#v, %v; want %#v, true", tt.fieldPath, got, keep, tt.want)
+			}
+		})
+	}
+}
+
 func TestDocumentedCRDDropFields(t *testing.T) {
 	document, err := os.ReadFile("../../docs/resources.md")
 	if err != nil {

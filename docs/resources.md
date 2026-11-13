@@ -205,6 +205,8 @@ fields, with these rules:
   segments, use `?` or `*` to match a literal `.` inside a field name.
 - `**` matches zero or more nested fields, so `**.command` removes `command`
   at any depth. A pattern cannot end with `**`.
+- A matched field is removed whatever its value type: a list, an object, or a
+  scalar.
 - A pattern that matches a custom field itself, or one of its parents, omits
   that custom field entirely.
 - Patterns cannot contain `,`, `:` or `|`. Invalid patterns stop the collector
@@ -213,6 +215,9 @@ fields, with these rules:
 `dropFields` is empty by default, so output is unchanged unless configured.
 Patterns also filter the automatically emitted `Labels` and `Annotations`
 using their Kubernetes paths, `metadata.labels` and `metadata.annotations`.
+A pattern starting with `**` therefore also removes label and annotation keys
+with a matching name; for example, `**.env` drops an `env` label. Anchor the
+pattern, such as `spec.**.env`, to leave metadata untouched.
 Other fixed metadata fields, including `Name`, `Namespace`, `ResourceType`,
 `APIVersion`, and timestamps, remain in the output.
 
