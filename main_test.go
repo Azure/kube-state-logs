@@ -8,27 +8,40 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/azure/kube-state-logs/pkg/collector"
 )
 
-func TestMainRejectsMalformedCRDConfigs(t *testing.T) {
-	const helperEnv = "KUBE_STATE_LOGS_TEST_MALFORMED_CRD_CONFIG"
-	if os.Getenv(helperEnv) == "1" {
-		os.Args = []string{"kube-state-logs", "--crd-configs=example.com/v1:widgets:spec:**.token:**.password"}
-		main()
-		return
-	}
-
-	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestMainRejectsMalformedCRDConfigs$")
-	cmd.Env = append(os.Environ(), helperEnv+"=1", "KUBERNETES_SERVICE_HOST=", "KUBERNETES_SERVICE_PORT=")
-	output, err := cmd.CombinedOutput()
-	if err == nil || !strings.Contains(string(output), "Failed to parse CRD configs") {
-		t.Fatalf("malformed CRD configuration: error = %v, output = %s", err, output)
+func TestParseConfigCRDConfigs(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		crdConfig string
+		wantErr   string
+		wantDrop  []string
+	}{
+		{"drop fields", "example.com/v1:widgets:spec:**.token|**.password", "", []string{"**.token", "**.password"}},
+		{"too many segments", "example.com/v1:widgets:spec:**.token:**.password", "failed to parse CRD configs", nil},
+		{"empty resource", "example.com/v1:", "failed to parse CRD configs", nil},
+		{"invalid drop pattern", "example.com/v1:widgets:spec:spec.**", "configuration validation failed", nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, _, err := parseConfig("kube-state-logs", []string{"--crd-configs=" + tt.crdConfig})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("parseConfig error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseConfig: %v", err)
+			}
+			if len(cfg.CRDs) != 1 || !slices.Equal(cfg.CRDs[0].DropFields, tt.wantDrop) {
+				t.Fatalf("CRDs = %+v, want drop fields %v", cfg.CRDs, tt.wantDrop)
+			}
+		})
 	}
 }
 
