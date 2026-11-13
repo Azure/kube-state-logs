@@ -165,6 +165,64 @@ config:
         - "status.lastTokenRefreshTime"
 ```
 
+#### Dropping Fields
+
+A custom field logs everything at its path, so selecting a broad field such as
+`spec.template` also logs nested values like container `env`, `args` and
+`command`, which can hold credentials. Use `dropFields` to remove fields from
+a CRD's custom fields, labels, and annotations before they are logged:
+
+```yaml
+config:
+  crdConfigs:
+    - apiVersion: "example.com/v1"
+      resource: "workloads"
+      kind: "Workload"
+      customFields:
+        - "spec.template"
+        - "status"
+      dropFields:
+        - "spec.template.spec.*ontainers.env"
+        - "spec.template.spec.*ontainers.args"
+        - "**.command"
+        - "**.*[Pp]assword*"
+        - "status.conditions.message"
+        - "metadata.annotations.vault*"
+        - "metadata.labels.private*"
+```
+
+Drop patterns are dot-separated paths from the object root, like custom
+fields, with these rules:
+
+- Lists are traversed automatically: a pattern applies to every list element.
+  The `*ontainers` segment in the example matches `containers`,
+  `initContainers`, and `ephemeralContainers`.
+- Each segment is a glob matched against one field name: `*` matches any
+  characters, `?` one character, `[...]` a character class (`[^...]`
+  negates it) and `\` escapes the next character. These also match `/`, so
+  `metadata.annotations.vault*` matches
+  `vault.hashicorp.com/agent-inject-secret-db`. Because `.` separates
+  segments, use `?` or `*` to match a literal `.` inside a field name.
+- `**` matches zero or more nested fields, so `**.command` removes `command`
+  at any depth. A pattern cannot end with `**`.
+- A pattern that matches a custom field itself, or one of its parents, omits
+  that custom field entirely.
+- Patterns cannot contain `,`, `:` or `|`. Invalid patterns stop the collector
+  at startup.
+
+`dropFields` is empty by default, so output is unchanged unless configured.
+Patterns also filter the automatically emitted `Labels` and `Annotations`
+using their Kubernetes paths, `metadata.labels` and `metadata.annotations`.
+Other fixed metadata fields, including `Name`, `Namespace`, `ResourceType`,
+`APIVersion`, and timestamps, remain in the output.
+
+Patterns match field names, not values; the example is not exhaustive secret
+detection. Review the fields in each CRD and configure exclusions accordingly.
+Filtering is applied to a copy of each value; informer cache objects are not
+modified. On the command line, drop fields are an optional fourth `|`-separated
+segment of each `--crd-configs` entry, for example
+`example.com/v1:workloads:spec.template:spec.template.spec.containers.env|**.command`.
+
 ## Resource Notes
 
 ### Container Resource

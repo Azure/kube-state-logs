@@ -8,11 +8,29 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/azure/kube-state-logs/pkg/collector"
 )
+
+func TestMainRejectsMalformedCRDConfigs(t *testing.T) {
+	const helperEnv = "KUBE_STATE_LOGS_TEST_MALFORMED_CRD_CONFIG"
+	if os.Getenv(helperEnv) == "1" {
+		os.Args = []string{"kube-state-logs", "--crd-configs=example.com/v1:widgets:spec:**.token:**.password"}
+		main()
+		return
+	}
+
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestMainRejectsMalformedCRDConfigs$")
+	cmd.Env = append(os.Environ(), helperEnv+"=1", "KUBERNETES_SERVICE_HOST=", "KUBERNETES_SERVICE_PORT=")
+	output, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "Failed to parse CRD configs") {
+		t.Fatalf("malformed CRD configuration: error = %v, output = %s", err, output)
+	}
+}
 
 func TestProbeHandler(t *testing.T) {
 	for _, tt := range []struct {

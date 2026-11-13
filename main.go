@@ -27,7 +27,7 @@ func main() {
 		logInterval          = flag.Duration("log-interval", 1*time.Minute, "Default interval between log outputs")
 		resources            = flag.String("resources", config.DefaultResourceList, "Comma-separated list of resources to monitor")
 		resourceConfigs      = flag.String("resource-configs", "", "Comma-separated list of resource configs: 'resource:interval[:labels=...][:fields=...][:promote-node-labels=label|label]'. Use '\\\\,' to escape commas in selectors (e.g., 'configmap:1m:labels=app=foo\\\\,env=prod'). If not specified, uses log-interval for all resources.")
-		crdConfigs           = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
+		crdConfigs           = flag.String("crd-configs", "", "Comma-separated list of CRD configurations (format apiVersion:resource[:customFields[:dropFields]] with '|'-separated fields; dropFields are path patterns supporting '*' and '**' (e.g., 'msi-acrpull.microsoft.com/v1:acrpullbindings:spec.acrServer|spec.managedIdentityResourceID|status.lastTokenRefreshTime|status.tokenExpirationTime')")
 		namespaces           = flag.String("namespaces", "", "Comma-separated list of namespaces to monitor (empty for all)")
 		logLevel             = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 		kubeconfig           = flag.String("kubeconfig", "", "Path to kubeconfig file (empty for in-cluster config)")
@@ -70,6 +70,11 @@ func main() {
 		klog.Fatalf("Failed to parse resource configs: %v", err)
 	}
 
+	crdConfigsList, err := config.ParseCRDConfigs(*crdConfigs)
+	if err != nil {
+		klog.Fatalf("Failed to parse CRD configs: %v", err)
+	}
+
 	// If no specific resource configs provided, create default ones from resources list
 	if len(resourceConfigsList) == 0 {
 		resourcesList := config.ParseResourceList(*resources)
@@ -86,7 +91,7 @@ func main() {
 		LogInterval:                  *logInterval,
 		Resources:                    config.ParseResourceList(*resources),
 		ResourceConfigs:              resourceConfigsList,
-		CRDs:                         config.ParseCRDConfigs(*crdConfigs),
+		CRDs:                         crdConfigsList,
 		Namespaces:                   config.ParseNamespaceList(*namespaces),
 		Kubeconfig:                   *kubeconfig,
 		ContainerEnvVars:             config.ParseContainerEnvVars(*containerEnvVars),

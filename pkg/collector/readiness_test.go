@@ -89,7 +89,7 @@ func TestRunReadinessWaitsForBuiltInCaches(t *testing.T) {
 			}
 			c.factory.Core().V1().Namespaces().Informer()
 			c.podFactory.Core().V1().Pods().Informer()
-			c.crdHandlers["widgets"] = resources.NewCRDHandler(dynamicClient, readinessTestGVR, "widgets", nil)
+			c.crdHandlers["widgets"] = resources.NewCRDHandler(dynamicClient, readinessTestGVR, "widgets", nil, nil)
 
 			listStarted := make(chan struct{})
 			releaseList := make(chan struct{})

@@ -26,16 +26,19 @@ type CRDHandler struct {
 	logger       interfaces.Logger
 	gvr          schema.GroupVersionResource
 	resourceName string
-	customFields []string // JSONPath-like field paths to extract
+	customFields []string             // JSONPath-like field paths to extract
+	dropFields   []utils.FieldPattern // Field path patterns removed before logging
 }
 
-// NewCRDHandler creates a new CRDHandler for a specific CRD
-func NewCRDHandler(client dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, customFields []string) *CRDHandler {
+// NewCRDHandler creates a new CRDHandler for a specific CRD. Fields matched by
+// dropFields are removed from custom fields and emitted labels and annotations.
+func NewCRDHandler(client dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, customFields []string, dropFields []utils.FieldPattern) *CRDHandler {
 	return &CRDHandler{
 		client:       client,
 		gvr:          gvr,
 		resourceName: resourceName,
 		customFields: customFields,
+		dropFields:   dropFields,
 	}
 }
 
@@ -85,25 +88,50 @@ func (h *CRDHandler) createLogEntry(obj *unstructured.Unstructured) types.CRDDat
 	// Extract custom fields based on JSONPath-like paths
 	customFields := make(map[string]any)
 	for _, fieldPath := range h.customFields {
-		if value := h.extractField(obj.Object, fieldPath); value != nil {
+		value := h.extractField(obj.Object, fieldPath)
+		if value == nil {
+			continue
+		}
+		if value, keep := utils.DropMatchingFields(fieldPath, value, h.dropFields); keep {
 			customFields[fieldPath] = value
 		}
 	}
 
-	// Create data structure - only include custom fields
+	labels, annotations := h.filteredMetadata(obj)
+
 	data := types.CRDData{
 		Timestamp:        time.Now(),
 		ResourceType:     strings.ToLower(obj.GetKind()), // Use lowercase Kind as ResourceType
 		Name:             utils.ExtractName(obj),
 		CreatedTimestamp: utils.ExtractCreationTimestamp(obj),
 		Namespace:        utils.ExtractNamespace(obj),
-		Labels:           utils.ExtractLabels(obj),
-		Annotations:      utils.ExtractAnnotations(obj),
+		Labels:           labels,
+		Annotations:      annotations,
 		APIVersion:       obj.GetAPIVersion(),
 		CustomFields:     customFields,
 	}
 
 	return data
+}
+
+func (h *CRDHandler) filteredMetadata(obj *unstructured.Unstructured) (map[string]string, map[string]string) {
+	if len(h.dropFields) == 0 {
+		return utils.ExtractLabels(obj), utils.ExtractAnnotations(obj)
+	}
+
+	metadata := make(map[string]any, 2)
+	for _, field := range []string{"labels", "annotations"} {
+		path := "metadata." + field
+		value := h.extractField(obj.Object, path)
+		if value == nil {
+			continue
+		}
+		if filtered, keep := utils.DropMatchingFields(path, value, h.dropFields); keep {
+			metadata[field] = filtered
+		}
+	}
+	filtered := &unstructured.Unstructured{Object: map[string]any{"metadata": metadata}}
+	return utils.ExtractLabels(filtered), utils.ExtractAnnotations(filtered)
 }
 
 // extractField extracts a field from an object using a dot-separated path

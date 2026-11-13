@@ -4,7 +4,9 @@
 package config
 
 import (
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -558,6 +560,99 @@ func TestConfig_LeaderElection(t *testing.T) {
 			}
 			if err := cfg.Validate(); (err != nil) != tt.wantErr {
 				t.Fatalf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParseCRDConfigs(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    []CRDConfig
+		wantErr string
+	}{
+		{name: "empty", input: "", want: []CRDConfig{}},
+		{
+			name:  "no fields",
+			input: "example.com/v1:widgets:",
+			want:  []CRDConfig{{APIVersion: "example.com/v1", Resource: "widgets"}},
+		},
+		{
+			name:  "custom fields only",
+			input: "example.com/v1:widgets:spec.a | spec.b",
+			want:  []CRDConfig{{APIVersion: "example.com/v1", Resource: "widgets", CustomFields: []string{"spec.a", "spec.b"}}},
+		},
+		{
+			name:  "custom and drop fields",
+			input: "example.com/v1:widgets:spec.template:spec.template.spec.containers.env|**.password,example.com/v1:gadgets:spec",
+			want: []CRDConfig{
+				{APIVersion: "example.com/v1", Resource: "widgets", CustomFields: []string{"spec.template"}, DropFields: []string{"spec.template.spec.containers.env", "**.password"}},
+				{APIVersion: "example.com/v1", Resource: "gadgets", CustomFields: []string{"spec"}},
+			},
+		},
+		{
+			name:  "drop fields without custom fields",
+			input: "example.com/v1:widgets::**.password",
+			want:  []CRDConfig{{APIVersion: "example.com/v1", Resource: "widgets", DropFields: []string{"**.password"}}},
+		},
+		{
+			name:  "escaped drop field patterns",
+			input: `example.com/v1:widgets:spec:**.secret\*|**.\token|**.secret"key`,
+			want: []CRDConfig{{
+				APIVersion: "example.com/v1", Resource: "widgets", CustomFields: []string{"spec"},
+				DropFields: []string{`**.secret\*`, `**.\token`, `**.secret"key`},
+			}},
+		},
+		{name: "extra separator", input: "example.com/v1:widgets:spec:**.token:**.password", wantErr: "expected apiVersion:resource"},
+		{name: "trailing extra separator", input: "example.com/v1:widgets:spec:**.token:", wantErr: "expected apiVersion:resource"},
+		{name: "comma in a pattern", input: "example.com/v1:widgets:spec:**.secret,token", wantErr: "expected apiVersion:resource"},
+		{name: "missing separator", input: "widgets", wantErr: "expected apiVersion:resource"},
+		{name: "missing api version", input: ":widgets", wantErr: "apiVersion and resource cannot be empty"},
+		{name: "missing resource", input: "example.com/v1:", wantErr: "apiVersion and resource cannot be empty"},
+		{name: "invalid entry after valid entry", input: "example.com/v1:widgets:spec,invalid", wantErr: "expected apiVersion:resource"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseCRDConfigs(tt.input)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("ParseCRDConfigs(%q) error = %v, want %q", tt.input, err, tt.wantErr)
+				}
+				if got != nil {
+					t.Fatalf("ParseCRDConfigs(%q) returned partial configs: %#v", tt.input, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseCRDConfigs(%q) error = %v", tt.input, err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseCRDConfigs(%q) = %#v, want %#v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfigValidateCRDDropFields(t *testing.T) {
+	tests := []struct {
+		name       string
+		dropFields []string
+		wantErr    bool
+	}{
+		{name: "none"},
+		{name: "valid", dropFields: []string{"spec.template.spec.containers.env", "**.*[Pp]assword*"}},
+		{name: "empty segment", dropFields: []string{"spec..env"}, wantErr: true},
+		{name: "trailing recursive", dropFields: []string{"spec.**"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Config{
+				LogInterval: time.Minute,
+				CRDs:        []CRDConfig{{APIVersion: "example.com/v1", Resource: "widgets", DropFields: tt.dropFields}},
+			}
+			if err := c.Validate(); (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

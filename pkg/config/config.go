@@ -11,6 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
+
+	"github.com/azure/kube-state-logs/pkg/utils"
 )
 
 // DefaultResourceList contains every built-in typed resource handler.
@@ -39,6 +41,9 @@ type CRDConfig struct {
 	APIVersion   string   // e.g., "apps/v1"
 	Resource     string   // e.g., "deployments"
 	CustomFields []string // e.g., ["spec.replicas", "spec.template.spec.containers"]
+	// DropFields lists field path patterns removed from custom fields and
+	// emitted labels and annotations before logging.
+	DropFields []string
 }
 
 // Config holds the configuration for kube-state-logs
@@ -246,11 +251,13 @@ func splitResourceConfigs(resourceConfigs string) ([]string, error) {
 	return parts, nil
 }
 
-// ParseCRDConfigs parses a comma-separated string of CRD configurations
-// Format: "apps/v1:deployments:spec.replicas,spec.template.spec.containers,networking.k8s.io/v1:ingresses:spec.rules"
-func ParseCRDConfigs(crdConfigs string) []CRDConfig {
+// ParseCRDConfigs parses a comma-separated string of CRD configurations.
+// Format: "apiVersion:resource[:customFields[:dropFields]]", where customFields
+// and dropFields are '|'-separated lists, e.g.,
+// "apps/v1:deployments:spec.replicas|spec.template:spec.template.spec.containers.env,networking.k8s.io/v1:ingresses:spec.rules"
+func ParseCRDConfigs(crdConfigs string) ([]CRDConfig, error) {
 	if crdConfigs == "" {
-		return []CRDConfig{}
+		return []CRDConfig{}, nil
 	}
 
 	var configs []CRDConfig
@@ -261,31 +268,45 @@ func ParseCRDConfigs(crdConfigs string) []CRDConfig {
 		}
 
 		parts := strings.Split(pair, ":")
-		if len(parts) >= 2 {
-			apiVersion := strings.TrimSpace(parts[0])
-			resource := strings.TrimSpace(parts[1])
-
-			var customFields []string
-			if len(parts) > 2 {
-				fieldsStr := strings.TrimSpace(parts[2])
-				if fieldsStr != "" {
-					customFields = strings.Split(fieldsStr, "|")
-					// Trim spaces from each field
-					for i, field := range customFields {
-						customFields[i] = strings.TrimSpace(field)
-					}
-				}
-			}
-
-			configs = append(configs, CRDConfig{
-				APIVersion:   apiVersion,
-				Resource:     resource,
-				CustomFields: customFields,
-			})
+		if len(parts) < 2 || len(parts) > 4 {
+			return nil, fmt.Errorf("invalid CRD config %q: expected apiVersion:resource[:customFields[:dropFields]]", pair)
 		}
+		apiVersion := strings.TrimSpace(parts[0])
+		resource := strings.TrimSpace(parts[1])
+		if apiVersion == "" || resource == "" {
+			return nil, fmt.Errorf("invalid CRD config %q: apiVersion and resource cannot be empty", pair)
+		}
+
+		var customFields, dropFields []string
+		if len(parts) > 2 {
+			customFields = splitFieldList(parts[2])
+		}
+		if len(parts) > 3 {
+			dropFields = splitFieldList(parts[3])
+		}
+
+		configs = append(configs, CRDConfig{
+			APIVersion:   apiVersion,
+			Resource:     resource,
+			CustomFields: customFields,
+			DropFields:   dropFields,
+		})
 	}
 
-	return configs
+	return configs, nil
+}
+
+// splitFieldList splits a '|'-separated list of field paths, trimming spaces.
+func splitFieldList(fieldsStr string) []string {
+	fieldsStr = strings.TrimSpace(fieldsStr)
+	if fieldsStr == "" {
+		return nil
+	}
+	fields := strings.Split(fieldsStr, "|")
+	for i, field := range fields {
+		fields[i] = strings.TrimSpace(field)
+	}
+	return fields
 }
 
 // GetResourceInterval returns the interval for a specific resource
@@ -393,6 +414,12 @@ func (c *Config) Validate() error {
 			klog.Warningf("Invalid interval %v for resource %s, setting to default LogInterval %v",
 				c.ResourceConfigs[i].Interval, c.ResourceConfigs[i].Name, c.LogInterval)
 			c.ResourceConfigs[i].Interval = c.LogInterval
+		}
+	}
+
+	for _, crd := range c.CRDs {
+		if _, err := utils.ParseFieldPatterns(crd.DropFields); err != nil {
+			return fmt.Errorf("invalid drop fields for CRD %s/%s: %w", crd.APIVersion, crd.Resource, err)
 		}
 	}
 

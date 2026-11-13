@@ -34,6 +34,7 @@ import (
 	"github.com/azure/kube-state-logs/pkg/config"
 	"github.com/azure/kube-state-logs/pkg/interfaces"
 	"github.com/azure/kube-state-logs/pkg/kubelet"
+	"github.com/azure/kube-state-logs/pkg/utils"
 )
 
 // Collector handles the collection and logging of Kubernetes resource state
@@ -350,8 +351,14 @@ func (c *Collector) registerCRDHandlers() {
 			Resource: crdConfig.Resource,
 		}
 
+		dropFields, err := utils.ParseFieldPatterns(crdConfig.DropFields)
+		if err != nil {
+			klog.Errorf("Skipping CRD %s/%s: invalid drop fields: %v", crdConfig.APIVersion, crdConfig.Resource, err)
+			continue
+		}
+
 		// Create CRD handler
-		handler := resources.NewCRDHandler(c.dynClient, gvr, crdConfig.Resource, crdConfig.CustomFields)
+		handler := resources.NewCRDHandler(c.dynClient, gvr, crdConfig.Resource, crdConfig.CustomFields, dropFields)
 		handlerKey := fmt.Sprintf("%s.%s", crdConfig.Resource, group)
 		c.crdHandlers[handlerKey] = handler
 
