@@ -28,4 +28,27 @@ YAML
   fi
 done
 
+for blank in '""' '"   "'; do
+  if output=$(helm template crd-blank "$chart" -f - 2>&1 <<YAML
+config:
+  resources:
+    - crd
+  crdConfigs:
+    - apiVersion: example.com/v1
+      resource: widgets
+      customFields:
+        - spec
+      dropFields:
+        - $blank
+YAML
+  ); then
+    printf 'Blank dropFields entry %s was not rejected\n' "$blank" >&2
+    exit 1
+  fi
+  if [[ "$output" != *"dropFields entries cannot be empty"* ]]; then
+    printf 'Unexpected error for blank dropFields entry %s: %s\n' "$blank" "$output" >&2
+    exit 1
+  fi
+done
+
 printf 'CRD pattern escaping tests passed\n'

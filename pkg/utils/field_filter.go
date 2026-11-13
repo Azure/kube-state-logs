@@ -45,11 +45,12 @@ func ParseFieldPattern(pattern string) (FieldPattern, error) {
 			if i == len(segments)-1 {
 				return nil, fmt.Errorf("field pattern %q cannot end with '**'", pattern)
 			}
-		case strings.Contains(segment, "**"):
-			return nil, fmt.Errorf("field pattern %q: '**' must be a whole segment", pattern)
 		default:
 			if err := validateGlob(segment); err != nil {
 				return nil, fmt.Errorf("field pattern %q has invalid segment %q: %w", pattern, segment, err)
+			}
+			if hasRecursiveToken(segment) {
+				return nil, fmt.Errorf("field pattern %q: '**' must be a whole segment", pattern)
 			}
 		}
 	}
@@ -194,6 +195,33 @@ func validateGlob(pattern string) error {
 		}
 	}
 	return nil
+}
+
+// hasRecursiveToken reports whether a validated glob contains two adjacent
+// wildcard '*' characters, ignoring escaped stars and character classes.
+func hasRecursiveToken(pattern string) bool {
+	p := []rune(pattern)
+	prevStar := false
+	for i := 0; i < len(p); {
+		switch p[i] {
+		case '*':
+			if prevStar {
+				return true
+			}
+			prevStar = true
+			i++
+			continue
+		case '\\':
+			i += 2
+		case '[':
+			_, width, _ := matchClass(p[i:], 0)
+			i += width
+		default:
+			i++
+		}
+		prevStar = false
+	}
+	return false
 }
 
 // matchGlob matches name against a validated glob. Unlike path.Match, '*',

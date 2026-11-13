@@ -129,6 +129,9 @@ spec:
             {{- $crdArg := printf "%s:%s:%s" .apiVersion .resource $customFieldsStr }}
             {{- if .dropFields }}
             {{- range .dropFields }}
+            {{- if not (trim (toString .)) }}
+            {{- fail "config.crdConfigs dropFields entries cannot be empty" }}
+            {{- end }}
             {{- if regexMatch "[,:|]" . }}
             {{- fail (printf "config.crdConfigs dropFields entry %q cannot contain ',', ':' or '|'" .) }}
             {{- end }}
