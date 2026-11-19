@@ -6,7 +6,7 @@ This document provides guidance for AI agents working with the kube-state-logs c
 
 **kube-state-logs** is a Kubernetes cluster state logger that outputs structured JSON logs. It's inspired by [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics) but produces logs instead of Prometheus metrics.
 
-- **Language**: Go 1.27.3+
+- **Language**: Go 1.27.4+
 - **Primary Dependencies**: k8s.io/client-go, k8s.io/api, k8s.io/apimachinery
 - **Deployment**: Helm chart in `charts/kube-state-logs/`
 
@@ -133,7 +133,7 @@ The Dockerfile uses **Azure Linux** with **Microsoft Go** for FIPS (Federal Info
 
 When updating the Go version, the following files must be changed:
 
-1. **`go.mod`** - Update the `go` directive (e.g., `go 1.27.3`)
+1. **`go.mod`** - Update the `go` directive (e.g., `go 1.27.4`)
 2. **`Dockerfile`** - Verify the `tdnf`-installed `golang` package meets the required version; refresh the base image digest as needed
 3. **`.github/workflows/ci.yml`** - Update `go-version` in setup-go jobs
 4. **`AGENTS.md`** - Update the documented Go version in Project Overview
@@ -141,10 +141,10 @@ When updating the Go version, the following files must be changed:
 Example version update:
 ```bash
 # go.mod
-go 1.27.3
+go 1.27.4
 
 # .github/workflows/ci.yml
-go-version: '1.27.3'
+go-version: '1.27.4'
 ```
 
 ### Updating Kubernetes API Version
